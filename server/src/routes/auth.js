@@ -6,9 +6,7 @@ import { BCRYPT_ROUNDS } from '../lib/constants.js';
 import { HttpError } from '../lib/httpError.js';
 import { parse, loginSchema } from '../lib/validation.js';
 import { loginLimiter } from '../middleware/rateLimit.js';
-import {
-  COOKIE_NAME, cookieOptions, createSession, destroySession, findUser,
-} from '../services/sessions.js';
+import { createSession, destroySession, findUser } from '../services/sessions.js';
 
 // Compared against when the username does not exist, so response time does not reveal valid usernames.
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', BCRYPT_ROUNDS);
@@ -62,8 +60,9 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 
   const token = await createSession(match.role, match.id);
-  res.cookie(COOKIE_NAME, token, { ...cookieOptions(), maxAge: config.sessionTtlHours * 3600 * 1000 });
-  res.json({ auth: { role: match.role, user: await findUser(match.role, match.id) } });
+  // The web app keeps this token and sends it as `Authorization: Bearer <token>`. It is an opaque
+  // random value (only its hash is stored server-side), not a JWT, and expires with the session.
+  res.json({ token, auth: { role: match.role, user: await findUser(match.role, match.id) } });
 });
 
 // GET /api/auth/me - 200 with { auth: null } when signed out, so the SPA boot is not a console error
@@ -71,7 +70,6 @@ router.get('/me', (req, res) => res.json({ auth: req.auth }));
 
 router.post('/logout', async (req, res) => {
   await destroySession(req.sessionToken);
-  res.clearCookie(COOKIE_NAME, cookieOptions());
   res.status(204).end();
 });
 

@@ -1,3 +1,21 @@
+import { API_URL } from '../lib/config.js';
+
+const TOKEN_KEY = 'ww_token';
+
+// Session token from login, sent as `Authorization: Bearer`. localStorage can be unavailable (private
+// mode, blocked storage), so every access is guarded and the app then just behaves as signed-out.
+export const tokenStore = {
+  get() {
+    try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+  },
+  set(token) {
+    try { localStorage.setItem(TOKEN_KEY, token); } catch { /* ignore */ }
+  },
+  clear() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+  },
+};
+
 export class ApiError extends Error {
   constructor(status, message, fields) {
     super(message);
@@ -7,7 +25,9 @@ export class ApiError extends Error {
 }
 
 async function request(path, { method = 'GET', json, form } = {}) {
-  const init = { method, credentials: 'same-origin', headers: {} };
+  const init = { method, headers: {} };
+  const token = tokenStore.get();
+  if (token) init.headers.Authorization = `Bearer ${token}`;
   if (json !== undefined) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(json);
@@ -17,7 +37,7 @@ async function request(path, { method = 'GET', json, form } = {}) {
 
   let res;
   try {
-    res = await fetch(`/api${path}`, init);
+    res = await fetch(`${API_URL}/api${path}`, init);
   } catch {
     throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.');
   }
@@ -36,8 +56,18 @@ export const api = {
   trackIssue: (id) => request(`/issues/${encodeURIComponent(id)}`),
   // auth
   me: () => request('/auth/me'),
-  login: (credentials) => request('/auth/login', { method: 'POST', json: credentials }),
-  logout: () => request('/auth/logout', { method: 'POST' }),
+  login: async (credentials) => {
+    const data = await request('/auth/login', { method: 'POST', json: credentials });
+    tokenStore.set(data.token);
+    return data;
+  },
+  logout: async () => {
+    try {
+      await request('/auth/logout', { method: 'POST' });
+    } finally {
+      tokenStore.clear();
+    }
+  },
   // corporator
   listAssigned: ({ status, page }) => {
     const params = new URLSearchParams();

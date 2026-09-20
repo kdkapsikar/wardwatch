@@ -1,11 +1,10 @@
 import { HttpError } from '../lib/httpError.js';
-import { COOKIE_NAME, resolveSession } from '../services/sessions.js';
+import { resolveSession, tokenFromRequest } from '../services/sessions.js';
 
-/** Attach `req.auth` ({ role, user } or null) from the session cookie. */
+/** Attach `req.auth` ({ role, user } or null) from the Authorization: Bearer token. */
 export async function loadSession(req, _res, next) {
-  const token = req.cookies?.[COOKIE_NAME];
-  req.sessionToken = token;
-  req.auth = await resolveSession(token);
+  req.sessionToken = tokenFromRequest(req);
+  req.auth = await resolveSession(req.sessionToken);
   next();
 }
 

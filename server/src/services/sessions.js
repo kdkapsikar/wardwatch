@@ -2,8 +2,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
 
-export const COOKIE_NAME = 'ww_session';
-
 const hash = (token) => createHash('sha256').update(token).digest('hex');
 
 const USER_SQL = {
@@ -33,7 +31,7 @@ export async function createSession(role, userId) {
   return token;
 }
 
-/** Resolve a cookie token to { role, user } or null (unknown, expired or deactivated user). */
+/** Resolve a session token to { role, user } or null (unknown, expired or deactivated user). */
 export async function resolveSession(token) {
   if (!token) return null;
   const { rows } = await query(
@@ -53,11 +51,8 @@ export async function purgeExpiredSessions() {
   await query('DELETE FROM sessions WHERE expires_at <= now()');
 }
 
-export function cookieOptions() {
-  return {
-    httpOnly: true,
-    sameSite: 'lax', // blocks cross-site POSTs, which is our CSRF defence
-    secure: config.cookieSecure,
-    path: '/',
-  };
+/** The session token from `Authorization: Bearer <token>`, or null. */
+export function tokenFromRequest(req) {
+  const [scheme, token] = (req.headers.authorization ?? '').split(' ');
+  return scheme?.toLowerCase() === 'bearer' && token ? token : null;
 }

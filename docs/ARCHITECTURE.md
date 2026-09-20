@@ -28,7 +28,8 @@ erDiagram
 | `admins` | Mayor / admin accounts, same shape as corporators minus the ward. |
 | `issues` | `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
 | `issue_updates` | Append-only history. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |
-| `sessions` | Opaque cookie token → only its SHA-256 is stored. Expired rows are purged hourly. |
+| `sessions` | Opaque bearer token → only its SHA-256 is stored. Expired rows are purged hourly. |
+| `photos` | Uploaded images (`name`, `content_type`, `data BYTEA`, ≤ 5 MB). `issues.photos` / `issue_updates.photos` hold `/uploads/<name>` URL paths that the API resolves against this table. Stored in the DB so they survive hosts with ephemeral disks. |
 
 Constraints worth knowing: status/category/length `CHECK`s live in the database, so bad data cannot get
 in even from a script. Indexes cover the hot paths: `(corporator_id, status)` for the corporator inbox,
@@ -53,13 +54,13 @@ All JSON under `/api`. Errors always look like
 | `POST /api/issues` | multipart: `ward_id, category, title, description, address?, latitude, longitude, name, phone, consent, photos[]` - required: all except `address` and `photos`. `phone` = 10-digit Indian mobile (6-9 start; `+91`/`91`/`0` prefix and spaces tolerated). `consent` must be `true`. `latitude`/`longitude` in -90..90 / -180..180 | `201 { issue_id, created_at }` · rate-limited |
 | `GET /api/issues/:publicId` | ID is normalised (case / missing dash tolerated) | `{ issue: { public_id, title, description, category, address, status, ward, photos, created_at, updated_at, resolved_at, updates: [{ status, remark, photos, by, created_at }] } }` - **no name/phone** · `404` if unknown |
 
-### Auth (session cookie `ww_session`)
+### Auth (`Authorization: Bearer <token>`)
 
 | Method & path | Body | Response |
 | --- | --- | --- |
-| `POST /api/auth/login` | `{ username, password }` | `{ auth: { role: "corporator"\|"admin", user: { id, name, username, ward? } } }` + cookie · `401` generic error. One endpoint for both roles: the role is whichever table holds the account (if a username exists in both, the password decides). |
+| `POST /api/auth/login` | `{ username, password }` | `{ token, auth: { role: "corporator"\|"admin", user: { id, name, username, ward? } } }` · `401` generic error. One endpoint for both roles: the role is whichever table holds the account (if a username exists in both, the password decides). |
 | `GET /api/auth/me` | - | `{ auth: {...} }` or `{ auth: null }` |
-| `POST /api/auth/logout` | - | `204`, cookie cleared |
+| `POST /api/auth/logout` | - (bearer token) | `204`; the session row is deleted, so the token stops working immediately |
 
 ### Corporator (`403` for other roles, `401` if signed out)
 
@@ -75,7 +76,7 @@ All JSON under `/api`. Errors always look like
 | --- | --- |
 | `GET /api/admin/dashboard` | `{ totals, wards[], corporators[], overdue_days, generated_at }` - each block has `total, submitted, acknowledged, in_progress, resolved, rejected, open, overdue, avg_resolution_hours, resolution_rate` |
 
-Static: `GET /uploads/<uuid>.<ext>` serves stored photos. In production every other non-API `GET`
+`GET /uploads/<uuid>.<ext>` serves a stored photo from the `photos` table (`Cache-Control: immutable`, `Cross-Origin-Resource-Policy: cross-origin` so a web app on another origin can display it). In production every other non-API `GET`
 falls back to the React app's `index.html`.
 
 ## 3. Frontend
@@ -136,7 +137,7 @@ main.jsx
 
 ### Frontend conventions
 
-- `api/client.js` is the only place that calls `fetch`; it throws `ApiError { status, message, fields }`
+- `lib/config.js` holds `API_URL` (`VITE_API_URL`, empty = same origin), the router basename (from Vite's `base`, `/wardwatch` on Pages) and `assetUrl()` for photo URLs; `api/client.js` is the only place that calls `fetch`, adds the bearer token, and it throws `ApiError { status, message, fields }`
   so forms can show per-field server validation messages next to the inputs.
 - Statuses and categories are defined once per side (`client/src/lib/constants.js`,
   `server/src/lib/constants.js`); the database `CHECK` constraints are the third copy - change all three.
@@ -164,5 +165,7 @@ the first `issue_updates` row → returns the ID. If the DB write fails the save
 own id, so other wards' issues 404), insert the `issue_updates` row, update `issues.status / updated_at /
 resolved_at`. Concurrent updates serialise on the row lock.
 
-**Authentication** - `POST /api/auth/login` looks the username up in `admins` and `corporators`, verifies bcrypt, inserts a `sessions` row, sets the cookie. `loadSession`
-middleware hashes the cookie and looks it up on every `/api` request; `requireRole` guards routes.
+**Authentication** - `POST /api/auth/login` looks the username up in `admins` and `corporators`, verifies bcrypt, inserts a `sessions` row and returns the token. The web app stores it in
+`localStorage` and sends it as `Authorization: Bearer`. `loadSession` middleware hashes the token and looks it up on
+every `/api` request; `requireRole` guards routes. When `CORS_ORIGINS` is set, the `cors` middleware lets exactly those
+origins call `/api` (no credentials/cookies involved).

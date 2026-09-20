@@ -3,11 +3,12 @@ import path from 'node:path';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import { config } from './config.js';
 import { query } from './db/pool.js';
 import { loadSession } from './middleware/auth.js';
 import { errorHandler, notFound } from './middleware/error.js';
+import photoRoutes from './routes/photos.js';
 import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
 import corporatorRoutes from './routes/corporator.js';
@@ -28,8 +29,8 @@ export function createApp() {
           // blob: lets the upload form preview photos before they are sent;
           // tile.openstreetmap.org serves the map tiles on the report form.
           'img-src': ["'self'", 'data:', 'blob:', 'https://tile.openstreetmap.org'],
-          // Forcing https breaks plain-HTTP local runs; only enable it when cookies are Secure too.
-          'upgrade-insecure-requests': config.cookieSecure ? [] : null,
+          // Forcing https breaks plain-HTTP local runs, so it is opt-out.
+          'upgrade-insecure-requests': config.forceHttps ? [] : null,
         },
       },
       // OSM's tile usage policy expects a Referer; helmet's default (no-referrer) would strip it.
@@ -38,12 +39,19 @@ export function createApp() {
   );
 
   app.use(express.json({ limit: '50kb' }));
-  app.use(cookieParser());
 
-  app.use(
-    '/uploads',
-    express.static(config.uploadDir, { index: false, dotfiles: 'deny', maxAge: '7d', immutable: true }),
-  );
+  app.use('/uploads', photoRoutes);
+
+  // Cross-origin browser access (e.g. web app on GitHub Pages, API elsewhere). No cookies are used,
+  // so credentials are not involved; only the listed origins get CORS headers.
+  if (config.corsOrigins.length > 0) {
+    app.use('/api', cors({
+      origin: config.corsOrigins,
+      methods: ['GET', 'POST'],
+      allowedHeaders: ['Authorization', 'Content-Type'],
+      maxAge: 600,
+    }));
+  }
 
   app.get('/api/health', async (_req, res) => {
     await query('SELECT 1');

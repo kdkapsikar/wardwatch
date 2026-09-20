@@ -2,9 +2,6 @@
 // TRUNCATES every table in it - use a dedicated database.
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import os from 'node:os';
-import path from 'node:path';
-import fs from 'node:fs';
 
 import dotenv from 'dotenv';
 
@@ -15,7 +12,7 @@ if (!process.env.TEST_DATABASE_URL) {
 }
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
-process.env.UPLOAD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'wardwatch-uploads-'));
+process.env.CORS_ORIGINS = 'https://kdkapsikar.github.io';
 
 const { default: bcrypt } = await import('bcryptjs');
 const { createApp } = await import('../src/app.js');
@@ -32,20 +29,21 @@ const NOT_AN_IMAGE = Buffer.from('<?php echo "hi"; ?>');
 let server;
 let base;
 
-/** Tiny cookie-aware client. */
+/** Tiny API client that keeps the session token from login and sends it as a Bearer header. */
 function client() {
-  let cookie = '';
-  return async (method, url, { json, form } = {}) => {
-    const headers = {};
-    if (cookie) headers.cookie = cookie;
+  let token = '';
+  return async (method, url, { json, form, headers: extra } = {}) => {
+    const headers = { ...extra };
+    if (token) headers.authorization = `Bearer ${token}`;
     let body;
     if (json) { headers['content-type'] = 'application/json'; body = JSON.stringify(json); }
     if (form) body = form;
     const res = await fetch(base + url, { method, headers, body });
-    const set = res.headers.get('set-cookie');
-    if (set) cookie = set.split(';')[0].startsWith('ww_session=;') ? '' : set.split(';')[0];
     const text = await res.text();
-    return { status: res.status, body: text ? JSON.parse(text) : null };
+    const parsed = text ? JSON.parse(text) : null;
+    if (url === '/api/auth/login' && parsed?.token) token = parsed.token;
+    if (url === '/api/auth/logout') token = '';
+    return { status: res.status, body: parsed, headers: res.headers };
   };
 }
 
@@ -73,11 +71,10 @@ before(async () => {
 after(async () => {
   await new Promise((r) => server.close(r));
   await pool.end();
-  fs.rmSync(process.env.UPLOAD_DIR, { recursive: true, force: true });
 });
 
 beforeEach(async () => {
-  await query('TRUNCATE issue_updates, issues, sessions, corporators, admins, wards RESTART IDENTITY CASCADE');
+  await query('TRUNCATE photos, issue_updates, issues, sessions, corporators, admins, wards RESTART IDENTITY CASCADE');
   const hash = await bcrypt.hash('correct-horse-1', 4);
   const w1 = (await query("INSERT INTO wards (number, name) VALUES (1, 'Ward One') RETURNING id")).rows[0].id;
   const w2 = (await query("INSERT INTO wards (number, name) VALUES (2, 'Ward Two') RETURNING id")).rows[0].id;
@@ -219,13 +216,13 @@ describe('citizen flow', () => {
   });
 
   test('rejects non-image uploads even when labelled image/jpeg, and stores nothing', async () => {
-    const filesBefore = fs.readdirSync(process.env.UPLOAD_DIR).length;
+    const photosBefore = (await query('SELECT count(*)::int AS n FROM photos')).rows[0].n;
     const res = await client()('POST', '/api/issues', {
       form: issueForm({}, [{ data: NOT_AN_IMAGE, type: 'image/jpeg', name: 'evil.jpg' }]),
     });
     assert.equal(res.status, 400);
     assert.equal((await query('SELECT count(*)::int AS n FROM issues')).rows[0].n, 0);
-    assert.equal(fs.readdirSync(process.env.UPLOAD_DIR).length, filesBefore);
+    assert.equal((await query('SELECT count(*)::int AS n FROM photos')).rows[0].n, photosBefore);
   });
 
   test('rejects more than 5 photos', async () => {
@@ -442,6 +439,78 @@ describe('admin dashboard', () => {
     const p2 = body.corporators.find((x) => x.name === 'Corp Two');
     assert.equal(p2.resolution_rate, 0);
     assert.equal(body.corporators.length, 2);
+  });
+});
+
+describe('photos, tokens and CORS', () => {
+  test('photos are stored in the database and served with the right type, caching and CORP headers', async () => {
+    const api = client();
+    const { body } = await api('POST', '/api/issues', { form: issueForm({}, [{ data: PNG, type: 'image/png', name: 'a.png' }]) });
+    const url = (await api('GET', `/api/issues/${body.issue_id}`)).body.issue.photos[0];
+    const stored = (await query('SELECT name, content_type, octet_length(data) AS bytes FROM photos')).rows;
+    assert.equal(stored.length, 1);
+    assert.equal(url, `/uploads/${stored[0].name}`);
+    assert.equal(stored[0].content_type, 'image/png');
+
+    const res = await fetch(base + url);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'image/png');
+    assert.match(res.headers.get('cache-control'), /immutable/);
+    assert.equal(res.headers.get('cross-origin-resource-policy'), 'cross-origin');
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.deepEqual(Buffer.from(await res.arrayBuffer()), PNG);
+  });
+
+  test('unknown or malformed photo names 404', async () => {
+    assert.equal((await fetch(`${base}/uploads/00000000-0000-0000-0000-000000000000.png`)).status, 404);
+    assert.equal((await fetch(`${base}/uploads/..%2f..%2fetc%2fpasswd`)).status, 404);
+    assert.equal((await fetch(`${base}/uploads/evil.php`)).status, 404);
+  });
+
+  test('a photo whose issue insert fails is not left behind', async () => {
+    const before = (await query('SELECT count(*)::int AS n FROM photos')).rows[0].n;
+    const res = await client()('POST', '/api/issues', {
+      form: issueForm({ ward_id: '9999' }, [{ data: PNG, type: 'image/png', name: 'a.png' }]),
+    });
+    assert.equal(res.status, 400);
+    assert.equal((await query('SELECT count(*)::int AS n FROM photos')).rows[0].n, before);
+  });
+
+  test('cookies are not accepted as credentials; only the Bearer token is', async () => {
+    const login = await client()('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    assert.match(login.body.token, /^[A-Za-z0-9_-]{40,}$/);
+    assert.equal(login.headers.get('set-cookie'), null);
+    const viaCookie = await fetch(`${base}/api/corporator/issues`, { headers: { cookie: `ww_session=${login.body.token}` } });
+    assert.equal(viaCookie.status, 401);
+    const viaBearer = await fetch(`${base}/api/corporator/issues`, { headers: { authorization: `Bearer ${login.body.token}` } });
+    assert.equal(viaBearer.status, 200);
+    const garbage = await fetch(`${base}/api/corporator/issues`, { headers: { authorization: 'Bearer nope' } });
+    assert.equal(garbage.status, 401);
+  });
+
+  test('logout invalidates the token server-side', async () => {
+    const api = client();
+    const { body } = await api('POST', '/api/auth/login', { json: { username: 'admin', password: 'correct-horse-1' } });
+    await api('POST', '/api/auth/logout');
+    const reused = await fetch(`${base}/api/admin/dashboard`, { headers: { authorization: `Bearer ${body.token}` } });
+    assert.equal(reused.status, 401);
+  });
+
+  test('CORS: the configured origin may call the API (incl. preflight); others may not', async () => {
+    const preflight = await fetch(`${base}/api/issues`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://kdkapsikar.github.io', 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization' },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://kdkapsikar.github.io');
+    assert.match(preflight.headers.get('access-control-allow-headers'), /authorization/i);
+
+    const ok = await fetch(`${base}/api/wards`, { headers: { origin: 'https://kdkapsikar.github.io' } });
+    assert.equal(ok.headers.get('access-control-allow-origin'), 'https://kdkapsikar.github.io');
+    assert.equal(ok.headers.get('access-control-allow-credentials'), null);
+
+    const other = await fetch(`${base}/api/wards`, { headers: { origin: 'https://evil.example' } });
+    assert.equal(other.headers.get('access-control-allow-origin'), null);
   });
 });
 

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api } from '../api/client.js';
+import { api, tokenStore } from '../api/client.js';
 
 const AuthContext = createContext(null);
 
@@ -8,7 +8,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     api.me()
-      .then(({ auth }) => setState({ loading: false, auth }))
+      .then(({ auth }) => {
+        if (!auth) tokenStore.clear(); // expired or revoked token
+        setState({ loading: false, auth });
+      })
       .catch(() => setState({ loading: false, auth: null }));
   }, []);
 

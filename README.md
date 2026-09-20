@@ -52,8 +52,8 @@ or an admin and sends you to the right area. (The old `/corporator/login` and `/
 Failed logins show a generic message to the user; the reason (`unknown_username`, `wrong_password`,
 `account_inactive`) is written to the server log - never the password.
 
-The Vite dev server proxies `/api` and `/uploads` to the API, so everything is same-origin: no CORS
-configuration and the session cookie behaves exactly as in production.
+The Vite dev server proxies `/api` and `/uploads` to the API, so everything is same-origin and no CORS
+configuration is needed.
 
 ### Without Docker
 
@@ -119,7 +119,7 @@ wardwatch/
 │       ├── pages/                route-level screens (citizen, corporator/, admin/)
 │       └── lib/                  constants (statuses, categories), formatters
 ├── server/                     Express API
-│   ├── db/migrations/          ordered .sql files (001_init, 002_sessions, 003_issue_location, 004_issue_consent)
+│   ├── db/migrations/          ordered .sql files (001_init ... 005_photos)
 │   ├── scripts/                seed.js, create-user.js
 │   ├── src/
 │   │   ├── app.js                middleware + route wiring (createApp for tests)
@@ -129,10 +129,12 @@ wardwatch/
 │   │   ├── middleware/           auth, upload, rateLimit, error
 │   │   └── lib/                  validation (zod), files (magic-byte checks), ids
 │   ├── test/api.test.js        integration tests
-│   └── uploads/                photo storage (gitignored)
 ├── docs/ARCHITECTURE.md        schema, API, pages, component hierarchy
 ├── docker-compose.yml          dev Postgres
-└── .github/workflows/ci.yml    build + test on every push / PR
+├── render.yaml                 Render blueprint for the API
+└── .github/workflows/
+    ├── ci.yml                    build + test on every push / PR
+    └── pages.yml                 deploy the web app to GitHub Pages
 ```
 
 Full details - database schema, every API route, pages and the component tree - are in
@@ -163,7 +165,82 @@ UPDATE corporators SET is_active = false WHERE username = 'asha.patil';
 
 ## Deploying
 
-The API serves the built React app, so production is **one Node process + Postgres**.
+WardWatch is a web app **plus** an API and a database. GitHub Pages can only host the static web app, so
+the API and Postgres need a home elsewhere. Two setups are supported.
+
+### A. GitHub Pages (web app) + Render (API) + Neon (Postgres) - all free tiers
+
+```
+Browser ── https://kdkapsikar.github.io/wardwatch/   (GitHub Pages: the React app)
+   └────── https://<your-api>.onrender.com/api/...   (Render: Express API, photos, sessions)
+                     └── Neon Postgres
+```
+
+Do these once, in order:
+
+**1. Database (Neon).** Create a project at <https://neon.tech>. From *Connection Details* copy the
+**direct** connection string (host *without* `-pooler`; the migration runner uses a session-level lock
+that pooled connections break). It looks like `postgres://user:pass@ep-xxx.aws.neon.tech/neondb?sslmode=require`.
+
+**2. Create the schema and your first accounts** from your own machine, pointing at Neon:
+
+```bash
+export DATABASE_URL='postgres://...neon...?sslmode=require'    # the string from step 1
+npm run migrate
+```
+
+Load your real wards (Neon → *SQL Editor*, or `psql`):
+
+```sql
+INSERT INTO wards (number, name) VALUES (1, 'Central Market'), (2, 'Riverside') /* ... */;
+```
+
+Create the mayor/admin and one corporator per ward (the password comes from `WW_PASSWORD` or a hidden prompt):
+
+```bash
+npm run user:create -w server -- admin mayor "Office of the Mayor"
+npm run user:create -w server -- corporator asha.patil "Asha Patil" --ward 1
+```
+
+Do **not** run `npm run seed` against this database - it creates well-known demo passwords.
+
+**3. API (Render).** At <https://render.com> choose *New → Blueprint*, select this repository, and when
+prompted set:
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | the Neon string from step 1 |
+| `CORS_ORIGINS` | `https://kdkapsikar.github.io` (origin only: no `/wardwatch`, no trailing slash) |
+
+Deploy. When it is live, open `https://<your-service>.onrender.com/api/health` - you should see
+`{"status":"ok"}`. Note the service URL. (Free plan: the API sleeps after ~15 minutes idle, so the first
+request after a quiet spell takes 30-60 s. Paid plans don't sleep.)
+
+**4. Web app (GitHub Pages).** In the GitHub repo:
+
+1. *Settings → Pages → Build and deployment → Source:* **GitHub Actions**.
+2. *Settings → Secrets and variables → Actions → Variables → New repository variable:*
+   `API_URL` = your Render URL, e.g. `https://wardwatch-api.onrender.com` (no trailing slash).
+   Optional: `MAP_CENTER` = `18.5204,73.8567` (your city's lat,lng) and `MAP_ZOOM` = `13`.
+3. *Actions → "Deploy web app to GitHub Pages" → Run workflow* (it also runs on every push to `main`
+   that touches `client/`).
+
+The site appears at **https://kdkapsikar.github.io/wardwatch/**. If you change `API_URL` later, re-run the workflow.
+
+Things to know about this setup:
+
+- Photos are stored **in Postgres** (not on disk), so they survive Render restarts. Neon's free tier has
+  0.5 GB, which is roughly a few hundred issues with photos; watch usage as you grow.
+- The Pages build injects a `Content-Security-Policy` `<meta>` tag limiting the page to your API and
+  OpenStreetMap tiles (Pages cannot send HTTP headers).
+- Deep links (`/wardwatch/track/WW-XXXXXXXX`) work through a `404.html` copy of `index.html`; browsers
+  log a harmless 404 for the page load, exactly as on any GitHub Pages SPA.
+- Every visitor's browser talks to Render and to `tile.openstreetmap.org` directly.
+
+### B. One server (API + web app together)
+
+The API also serves the built React app, so this is **one Node process + Postgres** on any host with TLS in
+front (a VPS, Fly.io, Railway, ...), and no CORS or `API_URL` setup is needed:
 
 ```bash
 npm ci
@@ -172,28 +249,30 @@ NODE_ENV=production npm run migrate       # on every deploy
 NODE_ENV=production npm start
 ```
 
-Checklist:
+### Checklist for either setup
 
-- Set `NODE_ENV=production`, a real `DATABASE_URL` (add `?sslmode=require` for managed Postgres), and
-  `TRUST_PROXY=1` when behind nginx / a load balancer (so rate limits see the client IP).
-- **Terminate TLS in front of the app.** In production the session cookie is `Secure`, so login only
-  works over HTTPS. (`COOKIE_SECURE=false` exists purely for testing a production build over plain HTTP.)
-- Mount a **persistent volume at `UPLOAD_DIR`** and include it in backups together with the database.
-  Photos are referenced from the database by path.
-- Set your proxy's `client_max_body_size` to at least ~30 MB (5 photos × 5 MB + form fields).
+- `NODE_ENV=production`, a real `DATABASE_URL` (`?sslmode=require` for managed Postgres), and
+  `TRUST_PROXY=1` behind a reverse proxy / load balancer so rate limits see the real client IP.
+- Serve everything over **HTTPS** (Render and Pages do this for you). `FORCE_HTTPS=false` exists only to try
+  a production build over plain HTTP locally.
+- Behind nginx, set `client_max_body_size` to at least ~30 MB (5 photos × 5 MB + form fields).
+- Back up the database - it holds photos too.
 - Health check: `GET /api/health` (checks the DB connection).
-- Create the first admin with `user:create`; do **not** run `seed` in production.
 
 ## Security notes
 
-- **Sessions, not JWT.** Login sets an opaque random token in an `httpOnly`, `SameSite=Lax` cookie; only
-  its SHA-256 hash is stored in `sessions`. Logout or deactivating a user takes effect immediately.
-  `SameSite=Lax` is the CSRF defence (cross-site POSTs don't carry the cookie).
+- **Server-side sessions, not JWT.** Login returns an opaque random token that the app sends as
+  `Authorization: Bearer <token>`; only its SHA-256 hash is stored in `sessions`. Logout, expiry (12 h) or
+  deactivating a user takes effect immediately on the server. No cookies are used, so there is no CSRF
+  exposure and it works when the web app and API are on different sites (GitHub Pages + Render).
+  The trade-off versus an `httpOnly` cookie: the token lives in the browser's `localStorage`, so an XSS
+  bug could read it. The strict CSP (`script-src 'self'`, no third-party scripts) is the mitigation.
+- CORS is off unless `CORS_ORIGINS` is set, and then only for exactly those origins.
 - Passwords are hashed with bcrypt (cost 12). Login errors are generic, and unknown usernames cost the
   same time as wrong passwords.
 - Rate limits: 10 failed logins / 15 min / IP, 10 issue submissions / hour / IP, 60 lookups / min / IP.
-- Uploads are validated by **magic bytes** (JPEG/PNG/WebP only), stored under random names, capped at
-  5 files × 5 MB, and served with `nosniff`.
+- Uploads are validated by **magic bytes** (JPEG/PNG/WebP only), stored in Postgres under random names,
+  capped at 5 files × 5 MB, and served with `nosniff` and long-lived immutable caching.
 - Issue IDs are random (≈8.5 × 10¹¹ possibilities), not sequential, and the public tracking view never
   returns the citizen's name or phone. Anyone who has the ID can see the issue's status and photos,
   so tell citizens to treat it like a receipt.
@@ -209,7 +288,7 @@ These are conscious V1 trade-offs, roughly in the order I'd tackle them:
 3. **No reassignment.** Issues go to the ward's corporator at submission; if a ward has none the issue
    is stored unassigned (visible in the admin totals) and no one can act on it until an admin
    assigns it in SQL.
-4. **Photos live on local disk** - fine for a single server; move to object storage to scale out.
+4. **Photos live in Postgres** - simple and portable, but it grows the database; move to object storage (S3/R2) at scale.
 5. **Location is self-reported** - it's whatever the citizen's GPS or tap says; nothing checks that it falls inside the chosen ward (no GIS/boundaries in V1). **No spam protection beyond rate limiting** (no CAPTCHA/OTP by design).
 6. Migrations are forward-only (no down scripts).
 7. Tested on Node 26 + PostgreSQL 18 locally; CI targets Node 22 + PostgreSQL 16. The Docker Compose

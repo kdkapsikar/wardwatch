@@ -1,8 +1,8 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { config } from '../config.js';
+import { query } from '../db/pool.js';
 import { HttpError } from './httpError.js';
+
+const CONTENT_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
 /** Identify an image by its magic bytes - never trust the client's filename or Content-Type. */
 export function detectImageExt(buf) {
@@ -13,7 +13,7 @@ export function detectImageExt(buf) {
 }
 
 /**
- * Validate every uploaded file, then write them under random names.
+ * Validate every uploaded file, then store them in the `photos` table under random names.
  * Returns public URL paths ("/uploads/<uuid>.jpg"). All-or-nothing.
  */
 export async function saveImages(files = []) {
@@ -27,12 +27,11 @@ export async function saveImages(files = []) {
     return { buffer: file.buffer, ext };
   });
 
-  await fs.mkdir(config.uploadDir, { recursive: true });
   const saved = [];
   try {
     for (const { buffer, ext } of validated) {
       const name = `${randomUUID()}.${ext}`;
-      await fs.writeFile(path.join(config.uploadDir, name), buffer, { flag: 'wx' });
+      await query('INSERT INTO photos (name, content_type, data) VALUES ($1, $2, $3)', [name, CONTENT_TYPES[ext], buffer]);
       saved.push(`/uploads/${name}`);
     }
   } catch (err) {
@@ -42,9 +41,9 @@ export async function saveImages(files = []) {
   return saved;
 }
 
-/** Best-effort cleanup, used when a DB write fails after files were saved. */
+/** Best-effort cleanup, used when a DB write fails after photos were stored. */
 export async function removeImages(urls) {
-  await Promise.all(
-    urls.map((url) => fs.unlink(path.join(config.uploadDir, path.basename(url))).catch(() => {})),
-  );
+  if (urls.length === 0) return;
+  const names = urls.map((url) => url.split('/').pop());
+  await query('DELETE FROM photos WHERE name = ANY($1)', [names]).catch(() => {});
 }

@@ -14,11 +14,15 @@ export const config = {
   isTest: env === 'test',
   port: num(process.env.PORT, 3001),
   databaseUrl: process.env.DATABASE_URL,
-  uploadDir: path.resolve(process.env.UPLOAD_DIR || './uploads'),
   clientDistDir: path.resolve(process.env.CLIENT_DIST_DIR || '../client/dist'),
   sessionTtlHours: num(process.env.SESSION_TTL_HOURS, 12),
   trustProxy: num(process.env.TRUST_PROXY, 0),
-  cookieSecure: bool(process.env.COOKIE_SECURE, env === 'production'),
+  // Adds `upgrade-insecure-requests` to the CSP. Default on in production; turn off to test a
+  // production build over plain HTTP.
+  forceHttps: bool(process.env.FORCE_HTTPS, env === 'production'),
+  // Exact web-app origins allowed to call the API from a browser, e.g. https://kdkapsikar.github.io
+  // Leave empty when the app and API share one origin.
+  corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean),
   overdueDays: num(process.env.OVERDUE_DAYS, 7),
   maxPhotos: 5,
   maxPhotoBytes: 5 * 1024 * 1024,
