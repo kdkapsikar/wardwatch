@@ -47,12 +47,19 @@ export async function migrate({ log = console.log } = {}) {
   }
 }
 
+/** Connection failures surface as an AggregateError with an EMPTY message, so unpack them. */
+function describeError(err) {
+  const inner = (err.errors ?? []).map((e) => e.message || e.code || String(e));
+  const parts = [err.message || err.name, err.code && `code=${err.code}`, ...inner].filter(Boolean);
+  return parts.join(' | ');
+}
+
 // Run directly: `node src/db/migrate.js`
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   migrate()
     .then(() => pool.end())
     .catch(async (err) => {
-      console.error(err.message);
+      console.error(`Migration failed: ${describeError(err)}`);
       await pool.end();
       process.exit(1);
     });
