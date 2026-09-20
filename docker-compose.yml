@@ -1,0 +1,24 @@
+# Local development database only. The app itself runs with `npm run dev`.
+#   docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wardwatch
+      POSTGRES_PASSWORD: wardwatch
+      POSTGRES_DB: wardwatch
+    ports:
+      - "5432:5432"
+    volumes:
+      - wardwatch-pgdata:/var/lib/postgresql/data
+      # Creates the throwaway database used by `npm test` on first start.
+      - ./docs/dev-init.sql:/docker-entrypoint-initdb.d/dev-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wardwatch -d wardwatch"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  wardwatch-pgdata:
