@@ -31,3 +31,11 @@ export const config = {
 if (!config.databaseUrl) {
   throw new Error('DATABASE_URL is not set. Copy server/.env.example to server/.env first.');
 }
+// pg happily "connects" to whatever host is in a mis-pasted value (e.g. a web URL), and the only symptom
+// is a confusing connection timeout - so fail fast with a clear message. The value itself is never printed.
+if (!/^postgres(ql)?:\/\//i.test(config.databaseUrl)) {
+  throw new Error(
+    'DATABASE_URL must be a Postgres connection string starting with postgres:// or postgresql:// ' +
+      `(it currently starts with "${config.databaseUrl.slice(0, 8)}..."). Check that you did not paste another setting, such as CORS_ORIGINS, here.`,
+  );
+}
