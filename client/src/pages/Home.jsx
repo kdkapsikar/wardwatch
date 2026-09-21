@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
 
 const STEPS = [
-  ['1', 'Report', 'Pick your ward, describe the problem and attach photos. No account needed.'],
+  ['1', 'Report', 'Pick your constituency, describe the problem and attach photos. No account needed.'],
   ['2', 'Get your Issue ID', 'Keep the ID we give you - it is all you need to follow progress.'],
-  ['3', 'Track', 'Your ward corporator updates the status, and you can see every step.'],
+  ['3', 'Track', 'The corporator for your constituency updates the status, and you can see every step.'],
 ];
 
 export default function Home() {
@@ -14,7 +14,7 @@ export default function Home() {
           Report a civic issue. <span className="text-brand-600">Watch it get fixed.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-slate-600">
-          Potholes, broken street lights, garbage, water problems - tell your ward corporator directly and follow the
+          Potholes, broken street lights, garbage, water problems - tell your constituency's corporator directly and follow the
           issue until it is resolved.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">

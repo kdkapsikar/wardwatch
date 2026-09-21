@@ -1,4 +1,4 @@
-// Development seed: sample wards, corporators, an admin and some demo issues.
+// Development seed: the 29 constituencies, a corporator for each, an admin and some demo issues.
 //   npm run seed
 // Idempotent. REFUSES to run when NODE_ENV=production - it creates accounts
 // with well-known passwords. In production load your real wards with SQL and
@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import { config } from '../src/config.js';
 import { pool, query } from '../src/db/pool.js';
 import { BCRYPT_ROUNDS } from '../src/lib/constants.js';
+import { CONSTITUENCIES } from '../db/constituencies.js';
 import { addUpdate, createIssue } from '../src/services/issues.js';
 
 if (config.isProd) {
@@ -16,17 +17,6 @@ if (config.isProd) {
 
 const DEV_CORPORATOR_PASSWORD = 'corporator123';
 const DEV_ADMIN_PASSWORD = 'admin12345';
-
-const WARDS = [
-  ['Central Market', 'Asha Patil'],
-  ['Riverside', 'Rohan Deshmukh'],
-  ['Old Town', 'Meera Iyer'],
-  ['Green Park', 'Imran Shaikh'],
-  ['Station Road', 'Kavita Joshi'],
-  ['Lake View', 'Sanjay Kulkarni'],
-  ['Industrial Area', 'Neha Verma'],
-  ['University Enclave', 'Arjun Nair'],
-];
 
 const SAMPLE_ISSUES = [
   ['roads', 'Large pothole near bus stop', 'A deep pothole has formed on the main road right next to the bus stop and is dangerous for two-wheelers.'],
@@ -47,17 +37,16 @@ async function main() {
     [adminHash],
   );
 
-  for (const [i, [wardName, corporatorName]] of WARDS.entries()) {
-    const number = i + 1;
+  for (const [number, areas] of CONSTITUENCIES) {
     const ward = await query(
       `INSERT INTO wards (number, name) VALUES ($1, $2)
        ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [number, wardName],
+      [number, areas],
     );
     await query(
       `INSERT INTO corporators (ward_id, name, username, password_hash) VALUES ($1, $2, $3, $4)
        ON CONFLICT (ward_id) DO NOTHING`,
-      [ward.rows[0].id, corporatorName, `corp${number}`, corporatorHash],
+      [ward.rows[0].id, `Constituency ${number} Corporator`, `corp${number}`, corporatorHash],
     );
   }
 
@@ -72,7 +61,7 @@ async function main() {
         const [category, title, description] = SAMPLE_ISSUES[(n + k) % SAMPLE_ISSUES.length];
         const issue = await createIssue({
           ward_id: ward.id, category, title, description, address: 'Near the main junction',
-          // Demo coordinates scattered around central Pune, one cluster per ward.
+          // Demo coordinates scattered around one area, one cluster per constituency.
           latitude: 18.5204 + n * 0.008 + k * 0.001, longitude: 73.8567 + n * 0.008 - k * 0.001,
           name: 'Demo Citizen', phone: '9876543210', photos: [],
         });
@@ -89,7 +78,7 @@ async function main() {
 
   console.log('\nSeed complete. Dev logins:');
   console.log(`  Admin       admin / ${DEV_ADMIN_PASSWORD}`);
-  console.log(`  Corporators corp1 ... corp${WARDS.length} / ${DEV_CORPORATOR_PASSWORD}`);
+  console.log(`  Corporators corp1 ... corp${CONSTITUENCIES.length} / ${DEV_CORPORATOR_PASSWORD}`);
 }
 
 main()

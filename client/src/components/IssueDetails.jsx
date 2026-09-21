@@ -16,7 +16,7 @@ export default function IssueDetails({ issue, children }) {
       </div>
 
       <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-        <div><dt className="text-slate-500">Ward</dt><dd className="font-medium">Ward {issue.ward.number} - {issue.ward.name}</dd></div>
+        <div><dt className="text-slate-500">Constituency</dt><dd className="font-medium">Constituency {issue.ward.number} - {issue.ward.name}</dd></div>
         <div><dt className="text-slate-500">Category</dt><dd className="font-medium">{categoryLabel(issue.category)}</dd></div>
         <div><dt className="text-slate-500">Reported</dt><dd className="font-medium">{formatDateTime(issue.created_at)}</dd></div>
         <div><dt className="text-slate-500">Last updated</dt><dd className="font-medium">{formatDateTime(issue.updated_at)}</dd></div>

@@ -20,7 +20,7 @@ export default function IssueSubmitted() {
       <div className="card p-8">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700" aria-hidden="true">✓</div>
         <h1 className="mt-4 text-2xl font-bold">Issue submitted</h1>
-        <p className="mt-2 text-sm text-slate-600">It has been assigned to your ward corporator. Save your Issue ID to track progress.</p>
+        <p className="mt-2 text-sm text-slate-600">It has been assigned to the corporator for your constituency. Save your Issue ID to track progress.</p>
 
         <p className="mt-6 select-all rounded-lg bg-brand-50 px-4 py-4 font-mono text-3xl font-bold tracking-widest text-brand-800" aria-label={`Issue ID ${id}`}>
           {id}

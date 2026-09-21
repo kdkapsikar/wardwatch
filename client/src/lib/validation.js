@@ -14,7 +14,7 @@ export function normalizeIndianMobile(input) {
 /** Returns { field: message } for every problem with the report form; {} when valid. */
 export function validateReport(values) {
   const errors = {};
-  if (!values.ward_id) errors.ward_id = 'Select your ward';
+  if (!values.ward_id) errors.ward_id = 'Select your constituency';
   if (!values.category) errors.category = 'Select a category';
 
   const title = values.title.trim();

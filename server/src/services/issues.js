@@ -16,7 +16,7 @@ export async function createIssue({
     const ward = await db.query('SELECT id FROM wards WHERE id = $1', [ward_id]);
     if (!ward.rowCount) {
       throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', {
-        ward_id: 'Select a valid ward',
+        ward_id: 'Select a valid constituency',
       });
     }
     const corporator = await db.query(

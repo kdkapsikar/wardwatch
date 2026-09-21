@@ -93,7 +93,7 @@ export default function ReportIssue() {
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">Report an issue</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Your ward corporator will see this. Your name and mobile number are shared only with them, never shown publicly.
+        The corporator for your constituency will see this. Your name and mobile number are shared only with them, never shown publicly.
         Fields marked <span className="text-red-600">*</span> are required.
       </p>
 
@@ -101,11 +101,11 @@ export default function ReportIssue() {
         <Alert>{formError}</Alert>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <FormField label="Ward" required error={errors.ward_id}>
+          <FormField label="Constituency" required error={errors.ward_id}>
             {(p) => (
               <select {...p} value={values.ward_id} onChange={set('ward_id')}>
-                <option value="">Select your ward</option>
-                {wards.map((w) => <option key={w.id} value={w.id}>Ward {w.number} - {w.name}</option>)}
+                <option value="">Select your constituency</option>
+                {wards.map((w) => <option key={w.id} value={w.id}>Constituency {w.number} - {w.name}</option>)}
               </select>
             )}
           </FormField>

@@ -6,7 +6,7 @@ import StatCard from '../../components/ui/StatCard.jsx';
 import { STATUS, STATUS_ORDER } from '../../lib/constants.js';
 import { formatDateTime, formatHours, formatPercent } from '../../lib/format.js';
 
-/** Stacked bar of a ward's issues by status, scaled against the busiest ward. */
+/** Stacked bar of a constituency's issues by status, scaled against the busiest one. */
 function WardBar({ ward, max }) {
   if (ward.total === 0) return <span className="text-xs text-slate-400">No issues</span>;
   const label = STATUS_ORDER.map((s) => `${ward[s]} ${STATUS[s].label.toLowerCase()}`).join(', ');
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
 
       <section aria-labelledby="wards" className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-          <h2 id="wards" className="font-semibold">Issues by ward</h2>
+          <h2 id="wards" className="font-semibold">Issues by constituency</h2>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Legend">
             {STATUS_ORDER.map((s) => (
               <li key={s} className="flex items-center gap-1.5"><span className={`h-2.5 w-2.5 rounded-sm ${STATUS[s].bar}`} />{STATUS[s].label}</li>
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
           <table className="w-full min-w-[640px]">
             <thead className="bg-slate-50">
               <tr>
-                <th className={th}>Ward</th>
+                <th className={th}>Constituency</th>
                 <th className={`${th} w-1/3`}>Breakdown</th>
                 <th className={`${th} text-right`}>Total</th>
                 <th className={`${th} text-right`}>Open</th>
@@ -74,7 +74,10 @@ export default function AdminDashboard() {
             <tbody className="divide-y divide-slate-100">
               {wards.map((w) => (
                 <tr key={w.ward_id}>
-                  <td className={`${td} font-medium`}>Ward {w.ward_number} <span className="font-normal text-slate-500">{w.ward_name}</span></td>
+                  <td className={`${td} font-medium`}>
+                    Constituency {w.ward_number}
+                    <span className="mt-0.5 block max-w-md text-xs font-normal leading-snug text-slate-500">{w.ward_name}</span>
+                  </td>
                   <td className={td}><WardBar ward={w} max={maxWard} /></td>
                   <td className={`${td} text-right`}>{w.total}</td>
                   <td className={`${td} text-right`}>{w.open}</td>
@@ -95,7 +98,7 @@ export default function AdminDashboard() {
             <thead className="bg-slate-50">
               <tr>
                 <th className={th}>Corporator</th>
-                <th className={th}>Ward</th>
+                <th className={th}>Constituency</th>
                 <th className={`${th} text-right`}>Assigned</th>
                 <th className={`${th} text-right`}>Resolved</th>
                 <th className={`${th} text-right`}>Open</th>
@@ -111,7 +114,7 @@ export default function AdminDashboard() {
                     {c.name}
                     {!c.is_active && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-500">inactive</span>}
                   </td>
-                  <td className={td}>Ward {c.ward_number}</td>
+                  <td className={td}>Constituency {c.ward_number}</td>
                   <td className={`${td} text-right`}>{c.total}</td>
                   <td className={`${td} text-right`}>{c.resolved}</td>
                   <td className={`${td} text-right`}>{c.open}</td>

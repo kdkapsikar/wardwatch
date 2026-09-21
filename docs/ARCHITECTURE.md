@@ -2,6 +2,10 @@
 
 ## 1. Database schema
 
+> **Naming:** users see *constituencies*; the database and API keep the original identifiers - the `wards` table,
+> `ward_id` columns and `ward` / `wards` JSON fields all mean "constituency". A constituency's areas are stored in
+> `wards.name`. Renaming the identifiers would be a pure refactor with no user-visible effect.
+
 Source of truth: [`server/db/migrations/`](../server/db/migrations). The five required tables plus one
 small `sessions` table (server-side login sessions, used instead of JWTs).
 
@@ -23,8 +27,8 @@ erDiagram
 
 | Table | Notes |
 | --- | --- |
-| `wards` | `number` is the human-facing ward number (unique). |
-| `corporators` | **One per ward** (`ward_id` is UNIQUE). Username unique case-insensitively (`lower(username)` index). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
+| `wards` | A **constituency**. `number` is its number, 1-29 (unique); `name` holds the areas it covers (see `server/db/constituencies.js`). |
+| `corporators` | **One per ward** (`ward_id` is UNIQUE, i.e. one corporator per constituency). Username unique case-insensitively (`lower(username)` index). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
 | `admins` | Mayor / admin accounts, same shape as corporators minus the ward. |
 | `issues` | `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
 | `issue_updates` | Append-only history. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |

@@ -1,7 +1,7 @@
 // Create an admin or corporator account (the only way to add users in V1).
 //
 //   npm run user:create -w server -- admin <username> "<Full Name>"
-//   npm run user:create -w server -- corporator <username> "<Full Name>" --ward <ward number>
+//   npm run user:create -w server -- corporator <username> "<Full Name>" --constituency <number>
 //
 // The password is read from the WW_PASSWORD env var, or prompted for (hidden).
 import { parseArgs } from 'node:util';
@@ -9,14 +9,14 @@ import bcrypt from 'bcryptjs';
 import { pool, query } from '../src/db/pool.js';
 import { BCRYPT_ROUNDS } from '../src/lib/constants.js';
 
-const { positionals, values } = parseArgs({ allowPositionals: true, options: { ward: { type: 'string' } } });
+const { positionals, values } = parseArgs({ allowPositionals: true, options: { constituency: { type: 'string' } } });
 const [role, rawUsername, name] = positionals;
 // Usernames are stored lowercase (login is case-insensitive either way).
 const username = rawUsername?.trim().toLowerCase();
 
 function usage(msg) {
   if (msg) console.error(`Error: ${msg}\n`);
-  console.error('Usage: user:create <admin|corporator> <username> "<Full Name>" [--ward <number>]');
+  console.error('Usage: user:create <admin|corporator> <username> "<Full Name>" [--constituency <number>]');
   process.exit(1);
 }
 
@@ -54,9 +54,9 @@ async function main() {
 
   let wardId;
   if (role === 'corporator') {
-    if (!values.ward) usage('--ward <number> is required for corporators');
-    const ward = await query('SELECT id FROM wards WHERE number = $1', [Number(values.ward)]);
-    if (!ward.rowCount) usage(`ward ${values.ward} does not exist`);
+    if (!values.constituency) usage('--constituency <number> is required for corporators');
+    const ward = await query('SELECT id FROM wards WHERE number = $1', [Number(values.constituency)]);
+    if (!ward.rowCount) usage(`constituency ${values.constituency} does not exist`);
     wardId = ward.rows[0].id;
   }
 
@@ -74,7 +74,7 @@ async function main() {
       );
     }
   } catch (err) {
-    if (err.code === '23505') usage('that username (or, for corporators, that ward) already has an account');
+    if (err.code === '23505') usage('that username (or, for corporators, that constituency) already has an account');
     throw err;
   }
   if (username !== rawUsername) console.log(`Note: username stored in lowercase ("${rawUsername}" -> "${username}").`);

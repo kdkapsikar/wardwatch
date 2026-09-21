@@ -5,7 +5,7 @@ import Alert from '../components/ui/Alert.jsx';
 import FormField from '../components/ui/FormField.jsx';
 import { homeFor } from '../lib/routes.js';
 
-/** One sign-in for ward corporators and the mayor's office; the server works out which you are. */
+/** One sign-in for constituency corporators and the mayor's office; the server works out which you are. */
 export default function Login() {
   const { auth, login } = useAuth();
   const location = useLocation();
@@ -35,7 +35,7 @@ export default function Login() {
     <div className="mx-auto max-w-sm">
       <div className="card p-6">
         <h1 className="text-xl font-semibold">Staff sign in</h1>
-        <p className="mt-1 text-sm text-slate-600">For ward corporators and the mayor&apos;s office.</p>
+        <p className="mt-1 text-sm text-slate-600">For constituency corporators and the mayor&apos;s office.</p>
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <Alert>{error}</Alert>
           <FormField label="Username" required>

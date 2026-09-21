@@ -1,16 +1,16 @@
 # WardWatch
 
-A simple civic grievance platform. Citizens report problems in their ward (no account, no OTP), get a
-unique Issue ID, and track progress. Ward corporators update the status with remarks and photos. The
+A simple civic grievance platform. Citizens report problems in their constituency (no account, no OTP), get a
+unique Issue ID, and track progress. Constituency corporators update the status with remarks and photos. The
 mayor / admin gets a city-wide dashboard.
 
 **Stack:** React (Vite) · Tailwind CSS v4 · Node.js + Express 5 · PostgreSQL
 
 | Who | What they can do |
 | --- | --- |
-| **Citizen** (no login) | Report an issue with photos, a pin on the map (GPS or tap), ward, name and phone → receive an Issue ID → look it up later and see the full update history |
-| **Corporator** (username + password) | See issues assigned to their ward, change status, add remarks and photos |
-| **Mayor / Admin** (username + password) | Ward-wise issue counts, resolution statistics, corporator performance summary |
+| **Citizen** (no login) | Report an issue with photos, a pin on the map (GPS or tap), constituency, name and phone → receive an Issue ID → look it up later and see the full update history |
+| **Corporator** (username + password) | See issues assigned to their constituency, change status, add remarks and photos |
+| **Mayor / Admin** (username + password) | Constituency-wise issue counts, resolution statistics, corporator performance summary |
 
 Deliberately **not** in V1: OTP, JWT, SMS/email, GIS analysis. The one external service is the free
 OpenStreetMap tile server used by the report form's map (see [Location picker](#location-picker)).
@@ -32,7 +32,7 @@ cp server/.env.example server/.env        # defaults match docker-compose.yml
 
 # 3. Create tables, load demo data
 npm run migrate
-npm run seed                              # dev only: wards, accounts, sample issues
+npm run seed                              # dev only: the 29 constituencies, accounts, sample issues
 
 # 4. Run API (:3001) and web app (:5173)
 npm run dev
@@ -45,7 +45,7 @@ Demo logins created by `npm run seed` (development only - the seed refuses to ru
 | Role | Username | Password |
 | --- | --- | --- |
 | Admin | `admin` | `admin12345` |
-| Corporator (wards 1-8) | `corp1` … `corp8` | `corporator123` |
+| Corporator (constituencies 1-29) | `corp1` … `corp29` | `corporator123` |
 
 Everyone signs in at **`/login`** ("Staff sign in"); the server works out whether the account is a corporator
 or an admin and sends you to the right area. (The old `/corporator/login` and `/admin/login` URLs redirect there.)
@@ -64,7 +64,7 @@ createdb wardwatch && createdb wardwatch_test
 
 ## Report form rules
 
-Required (marked `*`): ward, issue category, title, description, location, full name, mobile number, and the
+Required (marked `*`): constituency, issue category, title, description, location, full name, mobile number, and the
 consent checkbox. Street/landmark and photos are optional. Rules are checked in the browser for instant
 feedback and again by the API, which is the authority.
 
@@ -140,20 +140,27 @@ wardwatch/
 Full details - database schema, every API route, pages and the component tree - are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Managing accounts and wards
+## Managing accounts and constituencies
 
 V1 has no admin UI for user management; use SQL and the CLI.
 
 ```bash
-# Corporator (one per ward) and admin. Password comes from $WW_PASSWORD or a hidden prompt.
-npm run user:create -w server -- corporator asha.patil "Asha Patil" --ward 12
+# Corporator (one per constituency) and admin. Password comes from $WW_PASSWORD or a hidden prompt.
+npm run user:create -w server -- corporator asha.patil "Asha Patil" --constituency 12
 npm run user:create -w server -- admin mayor "Office of the Mayor"
 ```
 
-Load your real wards with SQL (the seed's sample wards are for development only):
+The 29 constituencies (with their areas) live in `server/db/constituencies.js`. Load or refresh them in any
+database - it also creates a `corp<N>` corporator for each constituency that has none when `WW_PASSWORD` is set:
+
+```bash
+WW_PASSWORD='choose-a-password' npm run constituencies:load -w server
+```
+
+To rename or add one by hand instead (the `wards` table stores a constituency's number and its areas in `name`):
 
 ```sql
-INSERT INTO wards (number, name) VALUES (1, 'Central Market'), (2, 'Riverside') /* ... */;
+INSERT INTO wards (number, name) VALUES (30, 'New area names here');
 ```
 
 Deactivate rather than delete a corporator so their history stays attributed - this also ends their
@@ -189,17 +196,18 @@ export DATABASE_URL='postgres://...neon...?sslmode=require'    # the string from
 npm run migrate
 ```
 
-Load your real wards (Neon → *SQL Editor*, or `psql`):
+Load the constituencies (from your machine, with `DATABASE_URL` still set). Set `WW_PASSWORD` to also create a
+`corp1`…`corp29` corporator account for each one:
 
-```sql
-INSERT INTO wards (number, name) VALUES (1, 'Central Market'), (2, 'Riverside') /* ... */;
+```bash
+WW_PASSWORD='choose-a-password' npm run constituencies:load -w server
 ```
 
-Create the mayor/admin and one corporator per ward (the password comes from `WW_PASSWORD` or a hidden prompt):
+Create the mayor/admin (the password comes from `WW_PASSWORD` or a hidden prompt); create any extra corporator the same way:
 
 ```bash
 npm run user:create -w server -- admin mayor "Office of the Mayor"
-npm run user:create -w server -- corporator asha.patil "Asha Patil" --ward 1
+npm run user:create -w server -- corporator asha.patil "Asha Patil" --constituency 1
 ```
 
 Do **not** run `npm run seed` against this database - it creates well-known demo passwords.
@@ -285,11 +293,11 @@ These are conscious V1 trade-offs, roughly in the order I'd tackle them:
 1. **No notifications.** Citizens must keep their Issue ID; corporators must check their inbox.
    (Email/SMS was excluded from V1.)
 2. **No account-management UI**, password reset or password change - use `user:create` / SQL.
-3. **No reassignment.** Issues go to the ward's corporator at submission; if a ward has none the issue
+3. **No reassignment.** Issues go to the constituency's corporator at submission; if a constituency has none the issue
    is stored unassigned (visible in the admin totals) and no one can act on it until an admin
    assigns it in SQL.
 4. **Photos live in Postgres** - simple and portable, but it grows the database; move to object storage (S3/R2) at scale.
-5. **Location is self-reported** - it's whatever the citizen's GPS or tap says; nothing checks that it falls inside the chosen ward (no GIS/boundaries in V1). **No spam protection beyond rate limiting** (no CAPTCHA/OTP by design).
+5. **Location is self-reported** - it's whatever the citizen's GPS or tap says; nothing checks that it falls inside the chosen constituency (no GIS/boundaries in V1). **No spam protection beyond rate limiting** (no CAPTCHA/OTP by design).
 6. Migrations are forward-only (no down scripts).
 7. Tested on Node 26 + PostgreSQL 18 locally; CI targets Node 22 + PostgreSQL 16. The Docker Compose
    file has not been run in the environment this was built in (no Docker available there).

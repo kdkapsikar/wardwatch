@@ -43,7 +43,7 @@ export default function CorporatorIssues() {
       <div>
         <h1 className="text-2xl font-bold">Assigned issues</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Ward {auth.user.ward.number} - {auth.user.ward.name}
+          Constituency {auth.user.ward.number} - {auth.user.ward.name}
         </p>
       </div>
 
