@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { useT } from '../../i18n/LanguageContext.jsx';
 
 /**
  * Label + control + error. `children` receives the props the control needs
@@ -6,6 +7,7 @@ import { useId } from 'react';
  */
 export default function FormField({ label, error, hint, optional, required, children }) {
   const id = useId();
+  const { t } = useT();
   const controlProps = {
     id,
     required: required || undefined,
@@ -18,7 +20,7 @@ export default function FormField({ label, error, hint, optional, required, chil
       <label htmlFor={id} className="label">
         {label}
         {required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}
-        {optional && <span className="ml-1 font-normal text-slate-400">(optional)</span>}
+        {optional && <span className="ml-1 font-normal text-slate-400">{t('common.optional')}</span>}
       </label>
       {children(controlProps)}
       {hint && !error && <p id={`${id}-hint`} className="mt-1 text-xs text-slate-500">{hint}</p>}

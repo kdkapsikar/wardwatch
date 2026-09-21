@@ -37,7 +37,9 @@ const optionalText = (label, max) =>
  * "9876543210". Returns null when the input is not a valid mobile number.
  */
 export function normalizeIndianMobile(input) {
-  const compact = String(input ?? '').replace(/[\s()-]/g, '');
+  // Devanagari digits (\u0966-\u096F) are accepted: a Marathi keyboard types them.
+  const latin = String(input ?? '').replace(/[\u0966-\u096F]/g, (d) => String(d.charCodeAt(0) - 0x0966));
+  const compact = latin.replace(/[\s()-]/g, '');
   const match = compact.match(/^(?:\+91|91|0)?([6-9]\d{9})$/);
   return match ? match[1] : null;
 }

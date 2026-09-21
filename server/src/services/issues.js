@@ -72,7 +72,7 @@ export async function getIssue(publicId, { corporatorId, staff = false } = {}) {
     `SELECT i.id, i.public_id, i.category, i.title, i.description, i.address, i.status, i.photos,
             i.created_at, i.updated_at, i.resolved_at, i.citizen_name, i.citizen_phone,
             i.latitude, i.longitude,
-            w.number AS ward_number, w.name AS ward_name,
+            w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr,
             c.name AS assigned_name
        FROM issues i JOIN wards w ON w.id = i.ward_id
        LEFT JOIN corporators c ON c.id = i.corporator_id
@@ -104,7 +104,7 @@ export async function getIssue(publicId, { corporatorId, staff = false } = {}) {
     address: row.address,
     status: row.status,
     photos: row.photos,
-    ward: { number: row.ward_number, name: row.ward_name },
+    ward: { number: row.ward_number, name: row.ward_name, name_mr: row.ward_name_mr },
     created_at: row.created_at,
     updated_at: row.updated_at,
     resolved_at: row.resolved_at,
@@ -164,7 +164,7 @@ export async function listIssues({ corporatorId, wardNumber } = {}, { status, pa
   const [list, total, counts] = await Promise.all([
     query(
       `SELECT i.public_id, i.title, i.category, i.status, i.address, i.created_at, i.updated_at,
-              w.number AS ward_number, w.name AS ward_name, c.name AS corporator_name
+              w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr, c.name AS corporator_name
          ${from}
         WHERE ${where}
         ORDER BY (i.status IN ('resolved','rejected')), i.created_at DESC
@@ -182,7 +182,7 @@ export async function listIssues({ corporatorId, wardNumber } = {}, { status, pa
       category: r.category,
       status: r.status,
       address: r.address,
-      ward: { number: r.ward_number, name: r.ward_name },
+      ward: { number: r.ward_number, name: r.ward_name, name_mr: r.ward_name_mr },
       corporator_name: r.corporator_name, // null = unassigned
       created_at: r.created_at,
       updated_at: r.updated_at,
@@ -255,7 +255,7 @@ export async function addUpdate(publicId, corporatorId, { status, remark, reject
 /** Constituencies (other than the corporator's own) that have an active corporator to receive a transfer. */
 export async function listTransferTargets(corporatorId) {
   const { rows } = await query(
-    `SELECT w.id, w.number, w.name
+    `SELECT w.id, w.number, w.name, w.name_mr
        FROM wards w
        JOIN corporators c ON c.ward_id = w.id AND c.is_active = true
       WHERE w.id <> (SELECT ward_id FROM corporators WHERE id = $1)

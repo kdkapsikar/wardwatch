@@ -7,7 +7,7 @@ const hash = (token) => createHash('sha256').update(token).digest('hex');
 const USER_SQL = {
   admin: `SELECT id, name, username, is_active FROM admins WHERE id = $1`,
   corporator: `SELECT c.id, c.name, c.username, c.is_active, c.ward_id,
-                      w.number AS ward_number, w.name AS ward_name
+                      w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr
                  FROM corporators c JOIN wards w ON w.id = c.ward_id
                 WHERE c.id = $1`,
 };
@@ -17,7 +17,7 @@ export async function findUser(role, id) {
   const row = rows[0];
   if (!row || !row.is_active) return null;
   const user = { id: row.id, name: row.name, username: row.username };
-  if (role === 'corporator') user.ward = { id: row.ward_id, number: row.ward_number, name: row.ward_name };
+  if (role === 'corporator') user.ward = { id: row.ward_id, number: row.ward_number, name: row.ward_name, name_mr: row.ward_name_mr };
   return user;
 }
 

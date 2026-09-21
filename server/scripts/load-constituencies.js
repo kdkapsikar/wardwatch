@@ -3,7 +3,7 @@
 //   npm run constituencies:load -w server
 //   WW_PASSWORD='...' npm run constituencies:load -w server     # also create missing corporator accounts
 //
-// - Inserts or updates constituencies 1-29 (number + areas).
+// - Inserts or updates constituencies 1-29 (number + areas, in English and Marathi).
 // - With WW_PASSWORD set, creates a corporator `corp<N>` ("Constituency N Corporator") for every
 //   constituency that has none, all with that password. Without it, no accounts are created.
 // - Renames old placeholder corporators called "Ward N Corporator". Real names are never touched.
@@ -23,12 +23,12 @@ async function main() {
   const summary = { wardsInserted: 0, wardsUpdated: 0, corporatorsCreated: 0, corporatorsRenamed: 0, skipped: [] };
 
   await withTransaction(async (db) => {
-    for (const [number, areas] of CONSTITUENCIES) {
+    for (const [number, areas, areasMr] of CONSTITUENCIES) {
       const { rows } = await db.query(
-        `INSERT INTO wards (number, name) VALUES ($1, $2)
-         ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name
+        `INSERT INTO wards (number, name, name_mr) VALUES ($1, $2, $3)
+         ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name, name_mr = EXCLUDED.name_mr
          RETURNING id, (xmax = 0) AS inserted`,
-        [number, areas],
+        [number, areas, areasMr],
       );
       const wardId = rows[0].id;
       if (rows[0].inserted) summary.wardsInserted += 1;

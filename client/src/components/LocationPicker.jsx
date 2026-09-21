@@ -4,6 +4,8 @@ import 'leaflet/dist/leaflet.css';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import { translate } from '../i18n/index.js';
+import { useT } from '../i18n/LanguageContext.jsx';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../lib/constants.js';
 
 // Leaflet's default icon URLs break under bundlers, so point it at the imported assets.
@@ -20,11 +22,8 @@ const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors';
 const GPS_ZOOM = 17;
 
-const GEO_ERRORS = {
-  1: 'Location permission was denied. Allow location access in your browser settings, or tap the map to place the marker.',
-  2: 'Your location could not be determined. Tap the map to place the marker instead.',
-  3: 'Finding your location timed out. Try again, or tap the map to place the marker.',
-};
+// Browser geolocation error codes -> dictionary keys (map.geo.<kind>)
+const GEO_KIND = { 1: 'denied', 2: 'unavailable', 3: 'timeout' };
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
@@ -34,6 +33,7 @@ const round6 = (n) => Math.round(n * 1e6) / 1e6;
  * GPS ("Use My Current Location"), by tapping the map, or by dragging the marker.
  */
 export default function LocationPicker({ latitude, longitude, onChange, error, disabled }) {
+  const { t } = useT();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -46,7 +46,8 @@ export default function LocationPicker({ latitude, longitude, onChange, error, d
   });
 
   const [source, setSource] = useState(null); // { type: 'gps', accuracy } | { type: 'map' } | null
-  const [geo, setGeo] = useState({ locating: false, message: '' });
+  // `kind` (not the text) is stored, so an error already on screen re-translates when the language changes.
+  const [geo, setGeo] = useState({ locating: false, kind: '' });
 
   const hasLocation = latitude !== null && latitude !== undefined && longitude !== null && longitude !== undefined;
 
@@ -93,7 +94,7 @@ export default function LocationPicker({ latitude, longitude, onChange, error, d
     if (markerRef.current) {
       markerRef.current.setLatLng(position);
     } else {
-      const marker = L.marker(position, { icon: pin, draggable: true, alt: 'Issue location' }).addTo(map);
+      const marker = L.marker(position, { icon: pin, draggable: true, alt: translate('map.markerAlt') }).addTo(map);
       marker.on('dragend', () => {
         const p = marker.getLatLng();
         setSource({ type: 'map' });
@@ -106,22 +107,22 @@ export default function LocationPicker({ latitude, longitude, onChange, error, d
 
   function handleUseLocation() {
     if (!('geolocation' in navigator)) {
-      setGeo({ locating: false, message: 'Your browser does not support location. Tap the map to place the marker.' });
+      setGeo({ locating: false, kind: 'unsupported' });
       return;
     }
     if (!window.isSecureContext) {
-      setGeo({ locating: false, message: 'Location needs a secure (HTTPS) connection. Tap the map to place the marker instead.' });
+      setGeo({ locating: false, kind: 'insecure' });
       return;
     }
-    setGeo({ locating: true, message: '' });
+    setGeo({ locating: true, kind: '' });
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        setGeo({ locating: false, message: '' });
+        setGeo({ locating: false, kind: '' });
         setSource({ type: 'gps', accuracy: Math.round(coords.accuracy) });
         onChangeRef.current({ latitude: round6(coords.latitude), longitude: round6(coords.longitude) });
         mapRef.current?.setView([coords.latitude, coords.longitude], GPS_ZOOM);
       },
-      (err) => setGeo({ locating: false, message: GEO_ERRORS[err.code] ?? GEO_ERRORS[2] }),
+      (err) => setGeo({ locating: false, kind: GEO_KIND[err.code] ?? 'unavailable' }),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
     );
   }
@@ -144,9 +145,9 @@ export default function LocationPicker({ latitude, longitude, onChange, error, d
           <circle cx="12" cy="12" r="7.5" />
           <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" />
         </svg>
-        {geo.locating ? 'Finding your location...' : 'Use My Current Location'}
+        {geo.locating ? t('map.locating') : t('map.useLocation')}
       </button>
-      {geo.message && <p role="alert" className="mt-2 text-xs text-red-600">{geo.message}</p>}
+      {geo.kind && <p role="alert" className="mt-2 text-xs text-red-600">{t(`map.geo.${geo.kind}`)}</p>}
 
       {/* Outer div is React-styled (error border). The inner div is handed to Leaflet, which adds its
           own classes to it, so its className must never change or React would wipe them. */}
@@ -158,7 +159,7 @@ export default function LocationPicker({ latitude, longitude, onChange, error, d
         <div
           ref={containerRef}
           role="group"
-          aria-label="Map. Tap or click to place a marker at the issue location."
+          aria-label={t('map.aria')}
           className="h-full w-full"
         />
       </div>
@@ -167,25 +168,25 @@ export default function LocationPicker({ latitude, longitude, onChange, error, d
         {hasLocation ? (
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <dl className="flex flex-wrap gap-x-5 gap-y-1">
-              <div className="flex gap-1.5"><dt className="text-slate-500">Latitude</dt><dd className="font-mono font-medium">{latitude.toFixed(6)}</dd></div>
-              <div className="flex gap-1.5"><dt className="text-slate-500">Longitude</dt><dd className="font-mono font-medium">{longitude.toFixed(6)}</dd></div>
+              <div className="flex gap-1.5"><dt className="text-slate-500">{t('map.latitude')}</dt><dd className="font-mono font-medium">{latitude.toFixed(6)}</dd></div>
+              <div className="flex gap-1.5"><dt className="text-slate-500">{t('map.longitude')}</dt><dd className="font-mono font-medium">{longitude.toFixed(6)}</dd></div>
             </dl>
             <button type="button" onClick={clear} disabled={disabled} className="text-xs font-medium text-slate-500 underline hover:text-slate-800">
-              Clear
+              {t('map.clear')}
             </button>
           </div>
         ) : (
-          <p className="text-slate-500">No location selected yet.</p>
+          <p className="text-slate-500">{t('map.none')}</p>
         )}
         {hasLocation && source?.type === 'gps' && (
-          <p className="mt-0.5 text-xs text-slate-500">From your device&apos;s GPS (accurate to about {source.accuracy} m). Drag the marker to adjust.</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t('map.fromGps', { m: source.accuracy })}</p>
         )}
-        {hasLocation && source?.type === 'map' && <p className="mt-0.5 text-xs text-slate-500">Placed on the map. Drag the marker to adjust.</p>}
+        {hasLocation && source?.type === 'map' && <p className="mt-0.5 text-xs text-slate-500">{t('map.placed')}</p>}
       </div>
 
       {error && <p className="mt-1 text-xs font-medium text-red-600">{error}</p>}
       {!error && !hasLocation && (
-        <p className="mt-1 text-xs text-slate-500">Tap the map to drop a marker on the exact spot, or use your current location.</p>
+        <p className="mt-1 text-xs text-slate-500">{t('map.hint')}</p>
       )}
     </div>
   );

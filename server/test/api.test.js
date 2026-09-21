@@ -154,12 +154,12 @@ describe('citizen flow', () => {
       assert.equal(res.status, 400, `expected "${bad}" to be rejected`);
       assert.match(res.body.error.fields.phone, /10-digit Indian mobile/);
     }
-    for (const good of ['9876543210', '98765 43210', '98765-43210', '+91 98765 43210', '919876543210', '09876543210', '6000000000', '9198765432']) {
+    for (const good of ['९८७६५४३२१०', '+९१ ९८७६५ ४३२१०', '9876543210', '98765 43210', '98765-43210', '+91 98765 43210', '919876543210', '09876543210', '6000000000', '9198765432']) {
       const res = await api('POST', '/api/issues', { form: issueForm({ phone: good }) });
       assert.equal(res.status, 201, `expected "${good}" to be accepted`);
     }
     const stored = (await query('SELECT citizen_phone FROM issues ORDER BY id')).rows.map((r) => r.citizen_phone);
-    assert.deepEqual(stored, ['9876543210', '9876543210', '9876543210', '9876543210', '9876543210', '9876543210', '6000000000', '9198765432']);
+    assert.deepEqual(stored, ['9876543210', '9876543210', '9876543210', '9876543210', '9876543210', '9876543210', '9876543210', '9876543210', '6000000000', '9198765432']);
   });
 
   test('requires the consent declaration and records when it was given', async () => {
@@ -780,6 +780,34 @@ describe('admin portal: category drill-down, records, private notes', () => {
       assert.equal(res.status, 204);
       assert.match(res.headers.get('access-control-allow-methods'), new RegExp(method));
     }
+  });
+});
+
+describe('Marathi constituency names', () => {
+  test('name_mr travels with every constituency the API returns (null when not set)', async () => {
+    await query("UPDATE wards SET name_mr = 'मराठी क्षेत्रे' WHERE number = 1");
+    const api = client();
+    const wards = (await api('GET', '/api/wards')).body.wards;
+    assert.equal(wards.find((w) => w.number === 1).name_mr, 'मराठी क्षेत्रे');
+    assert.equal(wards.find((w) => w.number === 2).name_mr, null);
+
+    const id = (await api('POST', '/api/issues', { form: issueForm({ ward_id: String(ctx.ward1) }) })).body.issue_id;
+    assert.equal((await api('GET', `/api/issues/${id}`)).body.issue.ward.name_mr, 'मराठी क्षेत्रे');
+
+    const corp = client();
+    const login = await corp('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    assert.equal(login.body.auth.user.ward.name_mr, 'मराठी क्षेत्रे');
+    assert.equal((await corp('GET', `/api/corporator/issues/${id}`)).body.issue.ward.name_mr, 'मराठी क्षेत्रे');
+    assert.equal((await corp('GET', '/api/corporator/issues?status=all')).body.issues[0].ward.name_mr, 'मराठी क्षेत्रे');
+    assert.equal((await corp('GET', '/api/corporator/transfer-targets')).body.wards[0].name_mr, null); // ward 2
+
+    const admin = client();
+    await admin('POST', '/api/auth/login', { json: { username: 'admin', password: 'correct-horse-1' } });
+    const dash = (await admin('GET', '/api/admin/dashboard')).body;
+    assert.equal(dash.wards.find((w) => w.ward_number === 1).ward_name_mr, 'मराठी क्षेत्रे');
+    assert.equal(dash.corporators.find((c) => c.ward_number === 1).ward_name_mr, 'मराठी क्षेत्रे');
+    assert.equal((await admin('GET', '/api/admin/issues?status=all')).body.issues[0].ward.name_mr, 'मराठी क्षेत्रे');
+    assert.equal((await admin('GET', `/api/admin/issues/${id}`)).body.issue.ward.name_mr, 'मराठी क्षेत्रे');
   });
 });
 

@@ -27,7 +27,7 @@ erDiagram
 
 | Table | Notes |
 | --- | --- |
-| `wards` | A **constituency**. `number` is its number, 1-29 (unique); `name` holds the areas it covers (see `server/db/constituencies.js`). |
+| `wards` | A **constituency**. `number` is its number, 1-29 (unique); `name` holds the areas it covers in English and `name_mr` in Marathi (see `server/db/constituencies.js`). |
 | `corporators` | **One per ward** (`ward_id` is UNIQUE, i.e. one corporator per constituency). Username unique case-insensitively (`lower(username)` index). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
 | `admins` | Mayor / admin accounts, same shape as corporators minus the ward. |
 | `issues` | `title` is a one-line headline **generated from the description** (first ~80 characters, cut at a word boundary; `server/src/lib/title.js`) - the form doesn't collect one and any `title` a client sends is ignored. `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
@@ -176,6 +176,22 @@ second effect syncing the marker to props. The Leaflet container is a **separate
 constant `className`**: Leaflet adds its own classes to that element, and React would strip them if it
 re-rendered a changing `className` on it (the error border lives on the outer wrapper instead).
 The component is `React.lazy`-loaded so Leaflet (~51 KB gzipped) is only downloaded on the report page.
+
+### Internationalisation (English / Marathi)
+
+`client/src/i18n/`: `en.js` and `mr.js` (flat `key -> string` dictionaries, `{name}` placeholders, `key_one` /
+`key_other` plurals), `index.js` (the engine: `translate()`, `translateServerMessage()`, language kept in module state so
+the API client and formatters can read it), `LanguageContext.jsx` (provider + `useT()` hook: `t`, `statusLabel`,
+`categoryLabel`, `wardName`, `personName`) and `components/LanguageToggle.jsx` (in the header).
+
+- **Components must call `useT()`** to re-render on a language change (the context value changes per language).
+- **API messages** are English; `ApiError` translates them when created (exact map `serverMessages` in `mr.js`, plus
+  patterns for "<field> is required / must be at least N characters").
+- **Data:** `wards.name_mr` holds each constituency's Marathi areas (API returns `name` and `name_mr`; the client
+  picks by language). The first history row's text "Issue received" is stored in English and translated on display.
+- Dates use `en-IN` / `mr-IN` with Latin digits; rupees always use Indian grouping (`₹1,25,000`).
+- `server/test/i18n.test.js` enforces key/placeholder parity, that every literal `t('...')` key exists, that no
+  dictionary key is dead, and that every message literal in `server/src` has a Marathi translation.
 
 ## 4. Key flows
 

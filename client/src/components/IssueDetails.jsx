@@ -1,10 +1,11 @@
-import { categoryLabel } from '../lib/constants.js';
+import { useT } from '../i18n/LanguageContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import PhotoGallery from './PhotoGallery.jsx';
 import StatusBadge from './ui/StatusBadge.jsx';
 
 /** Read-only issue card shared by the public tracking page and the corporator detail page. */
 export default function IssueDetails({ issue, children }) {
+  const { t, categoryLabel, wardName } = useT();
   return (
     <section className="card p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -16,12 +17,12 @@ export default function IssueDetails({ issue, children }) {
       </div>
 
       <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-        <div><dt className="text-slate-500">Constituency</dt><dd className="font-medium">Constituency {issue.ward.number} - {issue.ward.name}</dd></div>
-        <div><dt className="text-slate-500">Category</dt><dd className="font-medium">{categoryLabel(issue.category)}</dd></div>
-        <div><dt className="text-slate-500">Reported</dt><dd className="font-medium">{formatDateTime(issue.created_at)}</dd></div>
-        <div><dt className="text-slate-500">Last updated</dt><dd className="font-medium">{formatDateTime(issue.updated_at)}</dd></div>
+        <div><dt className="text-slate-500">{t('detail.constituency')}</dt><dd className="font-medium">{t('detail.constituencyValue', { n: issue.ward.number, name: wardName(issue.ward) })}</dd></div>
+        <div><dt className="text-slate-500">{t('detail.category')}</dt><dd className="font-medium">{categoryLabel(issue.category)}</dd></div>
+        <div><dt className="text-slate-500">{t('detail.reported')}</dt><dd className="font-medium">{formatDateTime(issue.created_at)}</dd></div>
+        <div><dt className="text-slate-500">{t('detail.updated')}</dt><dd className="font-medium">{formatDateTime(issue.updated_at)}</dd></div>
         {issue.address && (
-          <div className="sm:col-span-2"><dt className="text-slate-500">Address / landmark</dt><dd className="font-medium">{issue.address}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-slate-500">{t('detail.address')}</dt><dd className="font-medium">{issue.address}</dd></div>
         )}
       </dl>
 

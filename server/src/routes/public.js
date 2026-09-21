@@ -12,7 +12,7 @@ const router = Router();
 
 // GET /api/wards - populates the ward dropdown
 router.get('/wards', async (_req, res) => {
-  const { rows } = await query('SELECT id, number, name FROM wards ORDER BY number');
+  const { rows } = await query('SELECT id, number, name, name_mr FROM wards ORDER BY number');
   res.json({ wards: rows });
 });
 

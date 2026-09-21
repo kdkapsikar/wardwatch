@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useHref, useNavigate } from 'react-router-dom';
+import { useT } from '../i18n/LanguageContext.jsx';
 
 // Donut/pie with click-through slices and a legend table.
 //  - Colours come from the caller and are FIXED per category (see CATEGORY_CHART).
@@ -37,8 +38,9 @@ const pct = (value, total) => {
 
 function Slice({ slice, path, fullRing: ring, total, unit, dimmed, active, onActive }) {
   const navigate = useNavigate();
+  const { t } = useT();
   const href = useHref(slice.to);
-  const label = `${slice.label}: ${slice.value} ${unit} (${pct(slice.value, total)}). View these ${unit}`;
+  const label = t('pie.sliceLabel', { label: slice.label, n: slice.value, unit, pct: pct(slice.value, total) });
   return (
     <a
       className="pie-slice"
@@ -76,7 +78,8 @@ function Slice({ slice, path, fullRing: ring, total, unit, dimmed, active, onAct
 /**
  * slices: [{ key, label, value, color, to }]  (value > 0; order is the drawing order, clockwise from 12 o'clock)
  */
-export default function PieChart({ slices, unit = 'issues', ariaLabel }) {
+export default function PieChart({ slices, unit, ariaLabel }) {
+  const { t } = useT();
   const [activeKey, setActiveKey] = useState(null);
   const total = slices.reduce((n, s) => n + s.value, 0);
   if (total === 0) return null;
@@ -116,7 +119,7 @@ export default function PieChart({ slices, unit = 'issues', ariaLabel }) {
           </text>
           {active && (
             <text x={C} y={C + 27} className="fill-slate-500" style={{ font: '12px system-ui, sans-serif' }}>
-              {pct(active.value, total)} of all
+              {t('pie.ofAll', { pct: pct(active.value, total) })}
             </text>
           )}
         </g>
@@ -126,9 +129,9 @@ export default function PieChart({ slices, unit = 'issues', ariaLabel }) {
         <caption className="sr-only">{ariaLabel}</caption>
         <thead>
           <tr className="text-xs uppercase tracking-wide text-slate-500">
-            <th scope="col" className="pb-2 text-left font-semibold">Category</th>
+            <th scope="col" className="pb-2 text-left font-semibold">{t('pie.col.category')}</th>
             <th scope="col" className="pb-2 text-right font-semibold">{unit}</th>
-            <th scope="col" className="pb-2 text-right font-semibold">Share</th>
+            <th scope="col" className="pb-2 text-right font-semibold">{t('pie.col.share')}</th>
           </tr>
         </thead>
         <tbody>
@@ -157,7 +160,7 @@ export default function PieChart({ slices, unit = 'issues', ariaLabel }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-slate-200 text-slate-600">
-            <td className="pt-2 font-medium">Total</td>
+            <td className="pt-2 font-medium">{t('pie.total')}</td>
             <td className="pt-2 text-right font-semibold tabular-nums text-slate-900">{total}</td>
             <td />
           </tr>

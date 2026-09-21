@@ -91,6 +91,23 @@ createdb wardwatch && createdb wardwatch_test
   every count and share (so nothing depends on colour or hover alone); with 7 categories it is at the upper limit of
   what a pie communicates well, which is why the table is always shown next to it.
 
+## Languages (English / मराठी)
+
+The whole site is available in **English and Marathi**. A toggle at the top right of every page switches the
+language instantly; the choice is remembered in the browser, and a browser set to Marathi starts in Marathi.
+
+- Everything visible is translated: pages, buttons, statuses, categories, dates, validation and error messages
+  (including the ones the API returns), the chart, the map controls' text, and the constituencies' place names
+  (stored in `wards.name_mr`). Typing Devanagari digits (`९८७६५४३२१०`, `₹ १,२५,०००`) works in the phone and budget fields.
+- **What is not translated:** text people type (issue descriptions, remarks, notes, names) and place names in the
+  map tiles. It is shown exactly as entered.
+- **The Marathi text was written by an AI assistant - please have a native Marathi speaker review it**, especially
+  the official terms and the 29 constituencies' place names.
+- **Adding or changing text:** edit both `client/src/i18n/en.js` and `mr.js` (same key, same `{placeholders}`), then
+  use `t('your.key')` in the component. `npm test` fails if the two files differ, if a `t('...')` key is missing,
+  or if an API error message has no Marathi version (`serverMessages` in `mr.js`).
+- To load/refresh the Marathi place names in a database: `npm run constituencies:load -w server`.
+
 ## Report form rules
 
 Required (marked `*`): constituency, issue category, description, location, full name, mobile number, and the

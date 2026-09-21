@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client.js';
+import { useT } from '../../i18n/LanguageContext.jsx';
 import Alert from '../../components/ui/Alert.jsx';
 import CitizenContact from '../../components/CitizenContact.jsx';
 import IssueDetails from '../../components/IssueDetails.jsx';
@@ -11,6 +12,7 @@ import Spinner from '../../components/ui/Spinner.jsx';
 /** The exact record, read-only, for the mayor's office: full detail + history + private notes on this issue. */
 export default function AdminIssueDetail() {
   const { id } = useParams();
+  const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
   const [issue, setIssue] = useState(null);
@@ -32,9 +34,9 @@ export default function AdminIssueDetail() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       {cameFromApp ? (
-        <button type="button" onClick={() => navigate(-1)} className="text-sm text-brand-700 hover:underline">&larr; Back</button>
+        <button type="button" onClick={() => navigate(-1)} className="text-sm text-brand-700 hover:underline">{t('admin.detail.back')}</button>
       ) : (
-        <Link to="/admin/issues" className="text-sm text-brand-700 hover:underline">&larr; All issues</Link>
+        <Link to="/admin/issues" className="text-sm text-brand-700 hover:underline">{t('admin.detail.allIssues')}</Link>
       )}
       <Alert>{error}</Alert>
       {!issue && !error && <Spinner />}
@@ -43,9 +45,9 @@ export default function AdminIssueDetail() {
           <IssueDetails issue={issue}>
             <CitizenContact issue={issue} showAssignee />
           </IssueDetails>
-          <NotesPanel issue={issue.public_id} heading="My private notes on this issue" />
+          <NotesPanel issue={issue.public_id} heading={t('admin.detail.notesHeading')} />
           <section className="card p-5 sm:p-6" aria-labelledby="history">
-            <h2 id="history" className="mb-4 text-lg font-semibold">Update history</h2>
+            <h2 id="history" className="mb-4 text-lg font-semibold">{t('track.history')}</h2>
             <IssueTimeline updates={issue.updates} />
           </section>
         </>

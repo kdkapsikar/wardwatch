@@ -3,25 +3,27 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Alert from '../../components/ui/Alert.jsx';
+import { useT } from '../../i18n/LanguageContext.jsx';
 import Spinner from '../../components/ui/Spinner.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
 import StatusBadge from '../../components/ui/StatusBadge.jsx';
-import { STATUS, STATUS_ORDER, categoryLabel } from '../../lib/constants.js';
+import { STATUS, STATUS_ORDER } from '../../lib/constants.js';
 import { formatHours, formatPercent } from '../../lib/format.js';
 
 const issues = (params) => `/corporator/issues?${new URLSearchParams(params)}`;
 
 /** Where the corporator's issues stand; every segment is a link into the filtered list. */
 function StatusBar({ totals }) {
+  const { t, statusLabel } = useT();
   return (
     <div>
-      <div className="flex h-4 overflow-hidden rounded-full bg-slate-100" role="img" aria-label="Issues by status">
+      <div className="flex h-4 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={t('dash.statusAria')}>
         {STATUS_ORDER.filter((s) => totals[s] > 0).map((s) => (
           <Link
             key={s}
             to={issues({ status: s })}
-            title={`${STATUS[s].label}: ${totals[s]}`}
-            aria-label={`${STATUS[s].label}: ${totals[s]}. View these issues`}
+            title={`${statusLabel(s)}: ${totals[s]}`}
+            aria-label={t('dash.viewThese', { label: statusLabel(s), n: totals[s] })}
             className={`${STATUS[s].bar} transition hover:opacity-75`}
             style={{ width: `${(totals[s] / totals.total) * 100}%` }}
           />
@@ -32,7 +34,7 @@ function StatusBar({ totals }) {
           <li key={s}>
             <Link to={issues({ status: s })} className="flex items-center gap-1.5 text-slate-700 hover:text-brand-700 hover:underline">
               <span className={`h-2.5 w-2.5 rounded-sm ${STATUS[s].bar}`} />
-              {STATUS[s].label} <span className="font-semibold tabular-nums">{totals[s]}</span>
+              {statusLabel(s)} <span className="font-semibold tabular-nums">{totals[s]}</span>
             </Link>
           </li>
         ))}
@@ -47,6 +49,7 @@ const cellLink = 'font-medium text-brand-700 hover:underline';
 
 export default function CorporatorDashboard() {
   const { auth } = useAuth();
+  const { t, categoryLabel, wardName } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -63,54 +66,54 @@ export default function CorporatorDashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">My dashboard</h1>
-        <p className="mt-1 text-sm text-slate-600">Constituency {ward.number} - {ward.name}</p>
+        <h1 className="text-2xl font-bold">{t('dash.corp.title')}</h1>
+        <p className="mt-1 text-sm text-slate-600">{t('detail.constituencyValue', { n: ward.number, name: wardName(ward) })}</p>
       </div>
 
       {totals.total === 0 ? (
         <div className="card p-10 text-center text-sm text-slate-500">
-          No issues have been assigned to you yet. They will appear here as citizens report them.
+          {t('dash.corp.empty')}
         </div>
       ) : (
         <>
-          <section aria-label="Summary" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <StatCard label="Assigned to me" value={totals.total} to={issues({ status: 'all' })} />
-            <StatCard label="Open" value={totals.open} to={issues({ status: 'open' })} hint={`${totals.submitted} not yet acknowledged`} />
+          <section aria-label={t('dash.summary')} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <StatCard label={t('dash.assigned')} value={totals.total} to={issues({ status: 'all' })} />
+            <StatCard label={t('dash.open')} value={totals.open} to={issues({ status: 'open' })} hint={t('dash.notAck', { n: totals.submitted })} />
             <StatCard
-              label="Overdue"
+              label={t('dash.overdue')}
               value={totals.overdue}
               to={issues({ status: 'open', overdue: '1' })}
-              hint={`open > ${data.overdue_days} days`}
+              hint={t('dash.overdueHint', { days: data.overdue_days })}
               tone={totals.overdue ? 'text-amber-700' : undefined}
             />
-            <StatCard label="Resolved" value={totals.resolved} to={issues({ status: 'resolved' })} tone="text-emerald-700" />
-            <StatCard label="Rejected" value={totals.rejected} to={issues({ status: 'rejected' })} />
+            <StatCard label={t('dash.resolved')} value={totals.resolved} to={issues({ status: 'resolved' })} tone="text-emerald-700" />
+            <StatCard label={t('dash.rejected')} value={totals.rejected} to={issues({ status: 'rejected' })} />
           </section>
 
-          <section aria-label="Performance" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard label="Resolution rate" value={formatPercent(totals.resolution_rate)} hint="Resolved / (assigned - rejected)" />
-            <StatCard label="Avg. time to resolve" value={formatHours(totals.avg_resolution_hours)} />
-            <StatCard label="Received, last 30 days" value={totals.received_30d} />
-            <StatCard label="Resolved, last 30 days" value={totals.resolved_30d} />
+          <section aria-label={t('dash.performance')} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard label={t('dash.resolutionRate')} value={formatPercent(totals.resolution_rate)} hint={t('dash.resolutionRateHint')} />
+            <StatCard label={t('dash.avgTime')} value={formatHours(totals.avg_resolution_hours)} />
+            <StatCard label={t('dash.received30')} value={totals.received_30d} />
+            <StatCard label={t('dash.resolved30')} value={totals.resolved_30d} />
           </section>
 
           <section aria-labelledby="standing" className="card p-5">
-            <h2 id="standing" className="mb-3 font-semibold">Where things stand</h2>
+            <h2 id="standing" className="mb-3 font-semibold">{t('dash.standing')}</h2>
             <StatusBar totals={totals} />
           </section>
 
           <div className="grid gap-8 lg:grid-cols-2">
             <section aria-labelledby="attention" className="card overflow-hidden">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <h2 id="attention" className="font-semibold">Needs attention</h2>
+                <h2 id="attention" className="font-semibold">{t('dash.attention')}</h2>
                 {totals.overdue > 0 && (
                   <Link to={issues({ status: 'open', overdue: '1' })} className="text-xs font-medium text-brand-700 hover:underline">
-                    All {totals.overdue} overdue &rarr;
+                    {t('dash.allOverdue', { n: totals.overdue })}
                   </Link>
                 )}
               </div>
               {attention.length === 0 ? (
-                <p className="p-6 text-center text-sm text-slate-500">Nothing open. Well done!</p>
+                <p className="p-6 text-center text-sm text-slate-500">{t('dash.nothingOpen')}</p>
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {attention.map((i) => (
@@ -121,7 +124,7 @@ export default function CorporatorDashboard() {
                           <p className="text-xs text-slate-500">
                             {categoryLabel(i.category)} -{' '}
                             <span className={i.age_days > data.overdue_days ? 'font-medium text-amber-700' : ''}>
-                              {i.age_days === 0 ? 'today' : `${i.age_days} day${i.age_days === 1 ? '' : 's'} old`}
+                              {i.age_days === 0 ? t('dash.today') : t('dash.daysOld', { n: i.age_days, count: i.age_days })}
                             </span>
                           </p>
                         </div>
@@ -135,16 +138,16 @@ export default function CorporatorDashboard() {
 
             <section aria-labelledby="categories" className="card overflow-hidden">
               <div className="border-b border-slate-100 px-4 py-3">
-                <h2 id="categories" className="font-semibold">By category</h2>
+                <h2 id="categories" className="font-semibold">{t('dash.byCategory')}</h2>
               </div>
               <table className="w-full">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className={th}>Category</th>
-                    <th className={`${th} text-right`}>Total</th>
-                    <th className={`${th} text-right`}>Open</th>
-                    <th className={`${th} text-right`}>Resolved</th>
-                    <th className={`${th} text-right`}>Rejected</th>
+                    <th className={th}>{t('dash.col.category')}</th>
+                    <th className={`${th} text-right`}>{t('dash.col.total')}</th>
+                    <th className={`${th} text-right`}>{t('dash.col.open')}</th>
+                    <th className={`${th} text-right`}>{t('dash.col.resolved')}</th>
+                    <th className={`${th} text-right`}>{t('dash.col.rejected')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

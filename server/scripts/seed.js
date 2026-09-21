@@ -37,11 +37,11 @@ async function main() {
     [adminHash],
   );
 
-  for (const [number, areas] of CONSTITUENCIES) {
+  for (const [number, areas, areasMr] of CONSTITUENCIES) {
     const ward = await query(
-      `INSERT INTO wards (number, name) VALUES ($1, $2)
-       ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [number, areas],
+      `INSERT INTO wards (number, name, name_mr) VALUES ($1, $2, $3)
+       ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name, name_mr = EXCLUDED.name_mr RETURNING id`,
+      [number, areas, areasMr],
     );
     await query(
       `INSERT INTO corporators (ward_id, name, username, password_hash) VALUES ($1, $2, $3, $4)

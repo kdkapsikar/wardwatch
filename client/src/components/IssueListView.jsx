@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useT } from '../i18n/LanguageContext.jsx';
 import Alert from './ui/Alert.jsx';
 import Spinner from './ui/Spinner.jsx';
 import StatusBadge from './ui/StatusBadge.jsx';
-import { CATEGORIES, categoryLabel } from '../lib/constants.js';
+import { CATEGORIES } from '../lib/constants.js';
 import { formatDate } from '../lib/format.js';
 
 const sum = (counts, keys) => keys.reduce((n, k) => n + (counts?.[k] ?? 0), 0);
@@ -13,14 +14,14 @@ const OPEN = ['submitted', 'acknowledged', 'in_progress'];
 // Status filter chips. The URL parameters (status / category / overdue / ward) drive everything, so
 // dashboard drill-downs, links and the browser's back button all just work.
 const CHIPS = [
-  { key: 'open', label: 'Open', count: (c) => sum(c, OPEN) },
-  { key: 'submitted', label: 'Not acknowledged', count: (c) => sum(c, ['submitted']) },
-  { key: 'acknowledged', label: 'Acknowledged', count: (c) => sum(c, ['acknowledged']) },
-  { key: 'in_progress', label: 'In progress', count: (c) => sum(c, ['in_progress']) },
-  { key: 'resolved', label: 'Resolved', count: (c) => sum(c, ['resolved']) },
-  { key: 'rejected', label: 'Rejected', count: (c) => sum(c, ['rejected']) },
-  { key: 'all', label: 'All', count: (c) => sum(c, [...OPEN, 'resolved', 'rejected']) },
-];
+  { key: 'open', count: (c) => sum(c, OPEN) },
+  { key: 'submitted', count: (c) => sum(c, ['submitted']) },
+  { key: 'acknowledged', count: (c) => sum(c, ['acknowledged']) },
+  { key: 'in_progress', count: (c) => sum(c, ['in_progress']) },
+  { key: 'resolved', count: (c) => sum(c, ['resolved']) },
+  { key: 'rejected', count: (c) => sum(c, ['rejected']) },
+  { key: 'all', count: (c) => sum(c, [...OPEN, 'resolved', 'rejected']) },
+]; // labels: chip.<key> in the dictionaries
 
 /**
  * Filterable, paged issue list shared by the corporator inbox (scope "corporator") and the
@@ -28,6 +29,7 @@ const CHIPS = [
  */
 export default function IssueListView({ scope, title, subtitle }) {
   const admin = scope === 'admin';
+  const { t, categoryLabel, personName } = useT();
   const base = admin ? '/admin/issues' : '/corporator/issues';
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -69,7 +71,7 @@ export default function IssueListView({ scope, title, subtitle }) {
 
       <Alert tone="success">{location.state?.flash}</Alert>
 
-      <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-2">
+      <div role="group" aria-label={t('list.filterByStatus')} className="flex flex-wrap gap-2">
         {CHIPS.map((c) => (
           <button
             key={c.key}
@@ -80,7 +82,7 @@ export default function IssueListView({ scope, title, subtitle }) {
               status === c.key ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 ring-1 ring-inset ring-slate-300 hover:bg-slate-50'
             }`}
           >
-            {c.label}
+            {t(`chip.${c.key}`)}
             {data && <span className="ml-1.5 tabular-nums opacity-80">{c.count(data.counts)}</span>}
           </button>
         ))}
@@ -88,20 +90,20 @@ export default function IssueListView({ scope, title, subtitle }) {
 
       {(category || overdue || ward > 0) && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-slate-500">Filtered by:</span>
+          <span className="text-slate-500">{t('list.filteredBy')}</span>
           {category && (
-            <button type="button" onClick={() => go({ category: undefined, page: undefined })} className={`${removable} bg-brand-50 text-brand-800 hover:bg-brand-100`} aria-label={`Remove category filter ${categoryLabel(category)}`}>
+            <button type="button" onClick={() => go({ category: undefined, page: undefined })} className={`${removable} bg-brand-50 text-brand-800 hover:bg-brand-100`} aria-label={t('list.removeCategory', { name: categoryLabel(category) })}>
               {categoryLabel(category)} &times;
             </button>
           )}
           {ward > 0 && (
-            <button type="button" onClick={() => go({ ward: undefined, page: undefined })} className={`${removable} bg-brand-50 text-brand-800 hover:bg-brand-100`} aria-label={`Remove constituency filter ${ward}`}>
-              Constituency {ward} &times;
+            <button type="button" onClick={() => go({ ward: undefined, page: undefined })} className={`${removable} bg-brand-50 text-brand-800 hover:bg-brand-100`} aria-label={t('list.removeWard', { n: ward })}>
+              {t('list.constituencyChip', { n: ward })} &times;
             </button>
           )}
           {overdue && (
-            <button type="button" onClick={() => go({ overdue: undefined, page: undefined })} className={`${removable} bg-amber-50 text-amber-800 hover:bg-amber-100`} aria-label="Remove overdue filter">
-              Overdue &times;
+            <button type="button" onClick={() => go({ overdue: undefined, page: undefined })} className={`${removable} bg-amber-50 text-amber-800 hover:bg-amber-100`} aria-label={t('list.removeOverdue')}>
+              {t('list.overdue')} &times;
             </button>
           )}
         </div>
@@ -111,7 +113,7 @@ export default function IssueListView({ scope, title, subtitle }) {
       {!data && !error && <Spinner />}
 
       {data && data.issues.length === 0 && (
-        <div className="card p-10 text-center text-sm text-slate-500">No issues match these filters.</div>
+        <div className="card p-10 text-center text-sm text-slate-500">{t('list.empty')}</div>
       )}
 
       {data && data.issues.length > 0 && (
@@ -122,11 +124,11 @@ export default function IssueListView({ scope, title, subtitle }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-slate-900">{issue.title}</p>
                   <p className="text-xs text-slate-500">
-                    <span className="font-mono">{issue.public_id}</span> - {categoryLabel(issue.category)} - reported {formatDate(issue.created_at)}
+                    {t('list.reported', { id: issue.public_id, category: categoryLabel(issue.category), date: formatDate(issue.created_at) })}
                   </p>
                   {admin && (
                     <p className="text-xs text-slate-500">
-                      Constituency {issue.ward.number} - {issue.corporator_name ?? <span className="text-amber-700">unassigned</span>}
+                      {t('list.wardLine', { n: issue.ward.number, who: issue.corporator_name ? personName(issue.corporator_name) : t('list.unassigned') })}
                     </p>
                   )}
                 </div>
@@ -138,10 +140,10 @@ export default function IssueListView({ scope, title, subtitle }) {
       )}
 
       {pages > 1 && (
-        <nav className="flex items-center justify-between text-sm" aria-label="Pagination">
-          <button className="btn btn-secondary" disabled={page <= 1} onClick={() => go({ page: String(page - 1) })}>Previous</button>
-          <span className="text-slate-600">Page {page} of {pages}</span>
-          <button className="btn btn-secondary" disabled={page >= pages} onClick={() => go({ page: String(page + 1) })}>Next</button>
+        <nav className="flex items-center justify-between text-sm" aria-label={t('list.pagination')}>
+          <button className="btn btn-secondary" disabled={page <= 1} onClick={() => go({ page: String(page - 1) })}>{t('list.prev')}</button>
+          <span className="text-slate-600">{t('list.pageOf', { page, pages })}</span>
+          <button className="btn btn-secondary" disabled={page >= pages} onClick={() => go({ page: String(page + 1) })}>{t('list.next')}</button>
         </nav>
       )}
     </div>

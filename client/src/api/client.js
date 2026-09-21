@@ -1,3 +1,4 @@
+import { translateServerMessage } from '../i18n/index.js';
 import { API_URL } from '../lib/config.js';
 
 const TOKEN_KEY = 'ww_token';
@@ -16,11 +17,12 @@ export const tokenStore = {
   },
 };
 
+// The API speaks English; messages are translated to the current language when the error is created.
 export class ApiError extends Error {
   constructor(status, message, fields) {
-    super(message);
+    super(translateServerMessage(message));
     this.status = status;
-    this.fields = fields ?? {};
+    this.fields = Object.fromEntries(Object.entries(fields ?? {}).map(([k, v]) => [k, translateServerMessage(v)]));
   }
 }
 

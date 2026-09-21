@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useT } from '../i18n/LanguageContext.jsx';
 import Alert from './ui/Alert.jsx';
 import FormField from './ui/FormField.jsx';
 import Spinner from './ui/Spinner.jsx';
@@ -15,6 +16,7 @@ const LockIcon = () => (
 
 /** Add / edit form. `initial` = an existing note when editing. Calls onSaved(note) on success. */
 function NoteForm({ initial, issue, onSaved, onCancel, submitLabel }) {
+  const { t } = useT();
   const [body, setBody] = useState(initial?.body ?? '');
   const [budget, setBudget] = useState(initial?.budget_amount == null ? '' : String(initial.budget_amount));
   const [errors, setErrors] = useState({});
@@ -25,8 +27,8 @@ function NoteForm({ initial, issue, onSaved, onCancel, submitLabel }) {
     event.preventDefault();
     setFormError('');
     const problems = {};
-    if (!body.trim()) problems.body = 'Write something to save';
-    const parsed = parseBudget(budget);
+    if (!body.trim()) problems.body = t('notes.write');
+    const parsed = parseBudget(budget, t);
     if (!parsed.ok) problems.budget_amount = parsed.message;
     if (Object.keys(problems).length) {
       setErrors(problems);
@@ -55,27 +57,28 @@ function NoteForm({ initial, issue, onSaved, onCancel, submitLabel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3" noValidate>
       <Alert>{formError}</Alert>
-      <FormField label="Note" required error={errors.body}>
+      <FormField label={t('notes.note')} required error={errors.body}>
         {(p) => (
-          <textarea {...p} rows={3} value={body} maxLength={2000} placeholder="e.g. Proposed a new culvert here - to be funded from the ward development budget"
+          <textarea {...p} rows={3} value={body} maxLength={2000} placeholder={t('notes.placeholder')}
             onChange={(e) => { setBody(e.target.value); setErrors((x) => ({ ...x, body: undefined })); }} />
         )}
       </FormField>
-      <FormField label="Budget (₹)" optional error={errors.budget_amount} hint="Amount you have set aside or estimated. Digits only, e.g. 125000 or 1,25,000.">
+      <FormField label={t('notes.budget')} optional error={errors.budget_amount} hint={t('notes.budgetHint')}>
         {(p) => (
           <input {...p} inputMode="decimal" value={budget} placeholder="0"
             onChange={(e) => { setBudget(e.target.value); setErrors((x) => ({ ...x, budget_amount: undefined })); }} />
         )}
       </FormField>
       <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Saving...' : submitLabel}</button>
-        {onCancel && <button type="button" onClick={onCancel} disabled={saving} className="btn btn-secondary">Cancel</button>}
+        <button type="submit" disabled={saving} className="btn btn-primary">{saving ? t('upd.saving') : submitLabel}</button>
+        {onCancel && <button type="button" onClick={onCancel} disabled={saving} className="btn btn-secondary">{t('xfer.cancel')}</button>}
       </div>
     </form>
   );
 }
 
 function NoteItem({ note, showIssue, onChanged, onDeleted }) {
+  const { t } = useT();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -97,7 +100,7 @@ function NoteItem({ note, showIssue, onChanged, onDeleted }) {
   if (editing) {
     return (
       <li className="p-4">
-        <NoteForm initial={note} submitLabel="Save changes" onCancel={() => setEditing(false)} onSaved={(n) => { setEditing(false); onChanged(n); }} />
+        <NoteForm initial={note} submitLabel={t('notes.save')} onCancel={() => setEditing(false)} onSaved={(n) => { setEditing(false); onChanged(n); }} />
       </li>
     );
   }
@@ -108,15 +111,15 @@ function NoteItem({ note, showIssue, onChanged, onDeleted }) {
         <div className="min-w-0 flex-1">
           <p className="whitespace-pre-line text-sm text-slate-800">{note.body}</p>
           <p className="mt-1.5 text-xs text-slate-500">
-            {formatDateTime(note.created_at)}{edited && ' (edited)'}
+            {formatDateTime(note.created_at)}{edited && ` ${t('notes.edited')}`}
             {showIssue && note.issue && (
               <>
-                {' - on '}
+                {t('notes.on')}
                 <Link to={`/admin/issues/${note.issue.public_id}`} className="font-mono font-medium text-brand-700 hover:underline">{note.issue.public_id}</Link>
                 <span className="text-slate-400"> {note.issue.title}</span>
               </>
             )}
-            {showIssue && !note.issue && ' - general note'}
+            {showIssue && !note.issue && t('notes.general')}
           </p>
         </div>
         {note.budget_amount !== null && (
@@ -129,14 +132,14 @@ function NoteItem({ note, showIssue, onChanged, onDeleted }) {
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-medium">
         {confirmingDelete ? (
           <>
-            <span className="text-slate-600">Delete this note?</span>
-            <button type="button" onClick={remove} disabled={busy} className="text-rose-700 hover:underline">{busy ? 'Deleting...' : 'Yes, delete'}</button>
-            <button type="button" onClick={() => setConfirmingDelete(false)} disabled={busy} className="text-slate-600 hover:underline">Keep it</button>
+            <span className="text-slate-600">{t('notes.deleteQ')}</span>
+            <button type="button" onClick={remove} disabled={busy} className="text-rose-700 hover:underline">{busy ? t('notes.deleting') : t('notes.deleteYes')}</button>
+            <button type="button" onClick={() => setConfirmingDelete(false)} disabled={busy} className="text-slate-600 hover:underline">{t('notes.keep')}</button>
           </>
         ) : (
           <>
-            <button type="button" onClick={() => setEditing(true)} className="text-brand-700 hover:underline">Edit</button>
-            <button type="button" onClick={() => setConfirmingDelete(true)} className="text-slate-500 hover:text-rose-700 hover:underline">Delete</button>
+            <button type="button" onClick={() => setEditing(true)} className="text-brand-700 hover:underline">{t('notes.edit')}</button>
+            <button type="button" onClick={() => setConfirmingDelete(true)} className="text-slate-500 hover:text-rose-700 hover:underline">{t('notes.delete')}</button>
           </>
         )}
       </div>
@@ -148,7 +151,8 @@ function NoteItem({ note, showIssue, onChanged, onDeleted }) {
  * The signed-in admin's PRIVATE notes: on one issue (`issue` = its public id) or all of them
  * (`showIssue`, general notes allowed). The server only ever returns the caller's own notes.
  */
-export default function NotesPanel({ issue, showIssue = false, heading = 'My private notes' }) {
+export default function NotesPanel({ issue, showIssue = false, heading }) {
+  const { t } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -166,27 +170,27 @@ export default function NotesPanel({ issue, showIssue = false, heading = 'My pri
   return (
     <section className="card p-5 sm:p-6" aria-labelledby="notes-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="notes-heading" className="text-lg font-semibold">{heading}</h2>
+        <h2 id="notes-heading" className="text-lg font-semibold">{heading ?? t('admin.notes.card')}</h2>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-          <LockIcon /> Only you can see these
+          <LockIcon /> {t('notes.only')}
         </span>
       </div>
 
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
-        <NoteForm issue={issue} submitLabel="Add note" onSaved={(n) => setData((d) => recompute([n, ...(d?.notes ?? [])]))} />
+        <NoteForm issue={issue} submitLabel={t('notes.add')} onSaved={(n) => setData((d) => recompute([n, ...(d?.notes ?? [])]))} />
       </div>
 
       <Alert>{error}</Alert>
-      {!data && !error && <Spinner label="Loading notes..." />}
+      {!data && !error && <Spinner label={t('notes.loading')} />}
 
       {data && (
         <div className="mt-5">
           <p className="mb-2 text-sm text-slate-600">
-            {data.totals.count} note{data.totals.count === 1 ? '' : 's'}
-            {data.totals.budget_total > 0 && <> - budget noted: <strong className="tabular-nums text-slate-900">{formatRupees(data.totals.budget_total)}</strong></>}
+            {t('admin.notes.count', { n: data.totals.count, count: data.totals.count })}
+            {data.totals.budget_total > 0 && <> - {t('admin.notes.budgetLabel')} <strong className="tabular-nums text-slate-900">{formatRupees(data.totals.budget_total)}</strong></>}
           </p>
           {data.notes.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">No notes yet.</p>
+            <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t('notes.none')}</p>
           ) : (
             <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
               {data.notes.map((n) => (

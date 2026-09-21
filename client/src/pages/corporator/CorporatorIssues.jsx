@@ -1,13 +1,15 @@
 import IssueListView from '../../components/IssueListView.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useT } from '../../i18n/LanguageContext.jsx';
 
 export default function CorporatorIssues() {
   const { auth } = useAuth();
+  const { t, wardName } = useT();
   return (
     <IssueListView
       scope="corporator"
-      title="Issues"
-      subtitle={`Constituency ${auth.user.ward.number} - ${auth.user.ward.name}`}
+      title={t('nav.issues')}
+      subtitle={t('detail.constituencyValue', { n: auth.user.ward.number, name: wardName(auth.user.ward) })}
     />
   );
 }

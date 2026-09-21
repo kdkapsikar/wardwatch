@@ -30,7 +30,7 @@ export async function getDashboard(adminId) {
   const [totals, wards, corporators, unassigned, byCategory, myNotes] = await Promise.all([
     query(`SELECT ${AGG} FROM issues i`, params),
     query(
-      `SELECT w.id AS ward_id, w.number AS ward_number, w.name AS ward_name,
+      `SELECT w.id AS ward_id, w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr,
               c.name AS corporator_name, ${AGG}
          FROM wards w
          LEFT JOIN corporators c ON c.ward_id = w.id
@@ -41,7 +41,7 @@ export async function getDashboard(adminId) {
     ),
     query(
       `SELECT c.id AS corporator_id, c.name, c.is_active,
-              w.number AS ward_number, w.name AS ward_name, ${AGG}
+              w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr, ${AGG}
          FROM corporators c
          JOIN wards w        ON w.id = c.ward_id
          LEFT JOIN issues i  ON i.corporator_id = c.id
