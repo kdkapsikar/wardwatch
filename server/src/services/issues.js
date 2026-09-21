@@ -1,6 +1,7 @@
 import { query, withTransaction } from '../db/pool.js';
 import { HttpError } from '../lib/httpError.js';
 import { generatePublicId } from '../lib/ids.js';
+import { deriveTitle } from '../lib/title.js';
 import { CLOSING_STATUSES, OPEN_STATUSES } from '../lib/constants.js';
 
 export const PAGE_SIZE = 20;
@@ -12,6 +13,8 @@ export const PAGE_SIZE = 20;
 export async function createIssue({
   ward_id, category, title, description, address, latitude, longitude, name, phone, photos,
 }) {
+  // `title` is optional: the report form doesn't collect one, so it is derived from the description.
+  const headline = title || deriveTitle(description);
   return withTransaction(async (db) => {
     const ward = await db.query('SELECT id FROM wards WHERE id = $1', [ward_id]);
     if (!ward.rowCount) {
@@ -35,7 +38,7 @@ export async function createIssue({
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now())
          ON CONFLICT (public_id) DO NOTHING
          RETURNING id, public_id, created_at`,
-        [generatePublicId(), ward_id, corporator.rows[0]?.id ?? null, category, title, description,
+        [generatePublicId(), ward_id, corporator.rows[0]?.id ?? null, category, headline, description,
          address ?? null, name, phone, photos, latitude ?? null, longitude ?? null],
       );
       issue = result.rows[0];

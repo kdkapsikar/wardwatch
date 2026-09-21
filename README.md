@@ -64,8 +64,9 @@ createdb wardwatch && createdb wardwatch_test
 
 ## Report form rules
 
-Required (marked `*`): constituency, issue category, title, description, location, full name, mobile number, and the
-consent checkbox. Street/landmark and photos are optional. Rules are checked in the browser for instant
+Required (marked `*`): constituency, issue category, description, location, full name, mobile number, and the
+consent checkbox. Street/landmark and photos are optional. There is no title field: the one-line headline shown in the inbox and on the
+tracking page is generated from the start of the description. Rules are checked in the browser for instant
 feedback and again by the API, which is the authority.
 
 - **Mobile number:** a 10-digit Indian mobile number starting with 6-9. Spaces/dashes are ignored and a

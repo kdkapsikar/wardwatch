@@ -67,7 +67,6 @@ const coordinate = (label, min, max) =>
 export const issueSchema = z.object({
   ward_id: z.preprocess((v) => Number(v), z.number().int().positive('Select your constituency')),
   category: z.preprocess((v) => v ?? '', z.enum(CATEGORIES, { message: 'Select a category' })),
-  title: text('Title', { min: 5, max: 120 }),
   description: text('Description', { min: 10, max: 2000 }),
   address: optionalText('Address / landmark', 200),
   latitude: coordinate('Latitude', -90, 90),

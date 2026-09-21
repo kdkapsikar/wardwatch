@@ -49,7 +49,7 @@ function client() {
 
 function issueForm(overrides = {}, files = []) {
   const fields = {
-    ward_id: String(ctx.ward1), category: 'roads', title: 'Pothole on Main Road',
+    ward_id: String(ctx.ward1), category: 'roads',
     description: 'There is a large pothole near the school gate.', address: 'Near school',
     latitude: '18.520430', longitude: '73.856744',
     name: 'Test Citizen', phone: '98765 43210', consent: 'true', ...overrides,
@@ -126,9 +126,9 @@ describe('citizen flow', () => {
   });
 
   test('validates input with per-field errors', async () => {
-    const res = await client()('POST', '/api/issues', { form: issueForm({ title: 'x', phone: '123', category: 'nope', ward_id: '' }) });
+    const res = await client()('POST', '/api/issues', { form: issueForm({ phone: '123', category: 'nope', ward_id: '' }) });
     assert.equal(res.status, 400);
-    assert.deepEqual(Object.keys(res.body.error.fields).sort(), ['category', 'phone', 'title', 'ward_id']);
+    assert.deepEqual(Object.keys(res.body.error.fields).sort(), ['category', 'phone', 'ward_id']);
   });
 
   test('every mandatory field is enforced with its own message', async () => {
@@ -173,6 +173,29 @@ describe('citizen flow', () => {
     assert.equal((await api('POST', '/api/issues', { form: issueForm() })).status, 201);
     const { rows } = await query("SELECT consent_at FROM issues WHERE consent_at > now() - interval '1 minute'");
     assert.equal(rows.length, 1);
+  });
+
+  test('no title is needed: the headline is derived from the description', async () => {
+    const api = client();
+    const title = async (description, extra = {}) => {
+      const res = await api('POST', '/api/issues', { form: issueForm({ description, ...extra }) });
+      assert.equal(res.status, 201, JSON.stringify(res.body));
+      return (await api('GET', `/api/issues/${res.body.issue_id}`)).body.issue.title;
+    };
+    // short description is used as-is
+    assert.equal(await title('There is a large pothole near the school gate.'), 'There is a large pothole near the school gate.');
+    // whitespace and line breaks are collapsed
+    assert.equal(await title('Water   leaks\n\nfrom the   main pipe'), 'Water leaks from the main pipe');
+    // long descriptions are cut at a word boundary with an ellipsis, within the DB limit
+    const long = 'The street light outside the community hall has not worked for three weeks and it is dark and unsafe at night for everyone walking home.';
+    const cut = await title(long);
+    assert.ok(cut.endsWith('…') && cut.length <= 81 && cut.length >= 5, cut);
+    assert.ok(long.startsWith(cut.slice(0, -1)), 'cut text must be a prefix of the description');
+    assert.ok(!/ …$/.test(cut));
+    // a description that is mostly whitespace still yields a valid (>= 5 chars) title
+    assert.ok((await title('a         b')).length >= 5);
+    // a title sent by an old client is ignored, not trusted
+    assert.equal(await title('Broken swing in the park', { title: 'IGNORED TITLE' }), 'Broken swing in the park');
   });
 
   test('requires a location and rejects impossible coordinates', async () => {

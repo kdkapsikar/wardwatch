@@ -13,7 +13,7 @@ import { validateReport } from '../lib/validation.js';
 const LocationPicker = lazy(() => import('../components/LocationPicker.jsx'));
 
 const EMPTY = {
-  ward_id: '', category: '', title: '', description: '', address: '', name: '', phone: '',
+  ward_id: '', category: '', description: '', address: '', name: '', phone: '',
   latitude: null, longitude: null,
   consent: false, // must be actively ticked - never pre-ticked
 };
@@ -118,10 +118,6 @@ export default function ReportIssue() {
             )}
           </FormField>
         </div>
-
-        <FormField label="Title" required error={errors.title} hint="A short summary, e.g. &quot;Deep pothole near Green Park bus stop&quot;">
-          {(p) => <input {...p} value={values.title} onChange={set('title')} maxLength={120} />}
-        </FormField>
 
         <FormField label="Description" required error={errors.description} hint="What is wrong, and how long has it been like this?">
           {(p) => <textarea {...p} rows={4} value={values.description} onChange={set('description')} maxLength={2000} />}

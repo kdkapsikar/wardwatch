@@ -17,10 +17,6 @@ export function validateReport(values) {
   if (!values.ward_id) errors.ward_id = 'Select your constituency';
   if (!values.category) errors.category = 'Select a category';
 
-  const title = values.title.trim();
-  if (!title) errors.title = 'Title is required';
-  else if (title.length < 5) errors.title = 'Title must be at least 5 characters';
-
   const description = values.description.trim();
   if (!description) errors.description = 'Description is required';
   else if (description.length < 10) errors.description = 'Description must be at least 10 characters';
