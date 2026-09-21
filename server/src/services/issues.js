@@ -1,8 +1,9 @@
+import { config } from '../config.js';
 import { query, withTransaction } from '../db/pool.js';
 import { HttpError } from '../lib/httpError.js';
 import { generatePublicId } from '../lib/ids.js';
 import { deriveTitle } from '../lib/title.js';
-import { CLOSING_STATUSES, OPEN_STATUSES } from '../lib/constants.js';
+import { OPEN_STATUSES } from '../lib/constants.js';
 
 export const PAGE_SIZE = 20;
 
@@ -79,8 +80,14 @@ export async function getIssue(publicId, { corporatorId } = {}) {
   if (!row) return null;
 
   const updates = await query(
-    `SELECT u.status, u.remark, u.photos, u.created_at, c.name AS corporator_name
-       FROM issue_updates u LEFT JOIN corporators c ON c.id = u.corporator_id
+    `SELECT u.status, u.remark, u.rejection_reason, u.photos, u.created_at, u.event,
+            c.name AS corporator_name,
+            fw.number AS from_number, fw.name AS from_name,
+            tw.number AS to_number,   tw.name AS to_name
+       FROM issue_updates u
+       LEFT JOIN corporators c ON c.id  = u.corporator_id
+       LEFT JOIN wards fw      ON fw.id = u.from_ward_id
+       LEFT JOIN wards tw      ON tw.id = u.to_ward_id
       WHERE u.issue_id = $1
       ORDER BY u.created_at, u.id`,
     [row.id],
@@ -101,7 +108,13 @@ export async function getIssue(publicId, { corporatorId } = {}) {
     updates: updates.rows.map((u) => ({
       status: u.status,
       remark: u.remark,
+      rejection_reason: u.rejection_reason,
       photos: u.photos,
+      event: u.event,
+      // Set on transfer events: which constituency the issue left and where it went.
+      transfer: u.event === 'transfer'
+        ? { from: { number: u.from_number, name: u.from_name }, to: { number: u.to_number, name: u.to_name } }
+        : null,
       // null = filed by the citizen; otherwise the corporator's name (a public official).
       by: u.corporator_name,
       created_at: u.created_at,
@@ -115,18 +128,34 @@ export async function getIssue(publicId, { corporatorId } = {}) {
   return issue;
 }
 
-/** Corporator's inbox: paged list plus per-status counts for the filter tabs. */
-export async function listCorporatorIssues(corporatorId, { status, page }) {
-  const filters = ['corporator_id = $1'];
+/**
+ * Corporator's inbox: paged list plus per-status counts for the filter chips.
+ * Filters: status ('open' = submitted/acknowledged/in_progress), category, overdue (open + older than
+ * OVERDUE_DAYS). The counts honour category/overdue but not status, so chips always add up to the list.
+ */
+export async function listCorporatorIssues(corporatorId, { status, page, category, overdue }) {
+  const base = ['i.corporator_id = $1'];
   const params = [corporatorId];
-  if (status === 'open') {
-    params.push(OPEN_STATUSES);
-    filters.push(`status = ANY($${params.length})`);
-  } else if (status) {
-    params.push(status);
-    filters.push(`status = $${params.length}`);
+  if (category) {
+    params.push(category);
+    base.push(`i.category = $${params.length}`);
   }
-  const where = filters.join(' AND ');
+  if (overdue) {
+    params.push(OPEN_STATUSES, config.overdueDays);
+    base.push(`i.status = ANY($${params.length - 1}) AND i.created_at < now() - make_interval(days => $${params.length})`);
+  }
+  const baseWhere = base.join(' AND ');
+
+  const listFilters = [...base];
+  const listParams = [...params];
+  if (status === 'open') {
+    listParams.push(OPEN_STATUSES);
+    listFilters.push(`i.status = ANY($${listParams.length})`);
+  } else if (status) {
+    listParams.push(status);
+    listFilters.push(`i.status = $${listParams.length}`);
+  }
+  const where = listFilters.join(' AND ');
 
   const [list, total, counts] = await Promise.all([
     query(
@@ -136,13 +165,10 @@ export async function listCorporatorIssues(corporatorId, { status, page }) {
         WHERE ${where}
         ORDER BY (i.status IN ('resolved','rejected')), i.created_at DESC
         LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
-      params,
+      listParams,
     ),
-    query(`SELECT count(*)::int AS n FROM issues WHERE ${where}`, params),
-    query(
-      'SELECT status, count(*)::int AS n FROM issues WHERE corporator_id = $1 GROUP BY status',
-      [corporatorId],
-    ),
+    query(`SELECT count(*)::int AS n FROM issues i WHERE ${where}`, listParams),
+    query(`SELECT i.status, count(*)::int AS n FROM issues i WHERE ${baseWhere} GROUP BY i.status`, params),
   ]);
 
   const byStatus = Object.fromEntries(counts.rows.map((r) => [r.status, r.n]));
@@ -166,9 +192,11 @@ export async function listCorporatorIssues(corporatorId, { status, page }) {
 
 /**
  * Corporator posts an update (status change and/or remark and/or photos).
+ *  - remark is always optional;
+ *  - rejecting REQUIRES a rejection_reason (photos can be attached as proof).
  * Locks the issue row so two concurrent updates cannot interleave.
  */
-export async function addUpdate(publicId, corporatorId, { status, remark, photos }) {
+export async function addUpdate(publicId, corporatorId, { status, remark, rejection_reason: reason, photos }) {
   await withTransaction(async (db) => {
     const { rows } = await db.query(
       'SELECT id, status FROM issues WHERE public_id = $1 AND corporator_id = $2 FOR UPDATE',
@@ -184,17 +212,26 @@ export async function addUpdate(publicId, corporatorId, { status, remark, photos
         remark: 'Change the status, or add a remark or photo',
       });
     }
-    // A repeated remark on an already-closed issue is fine, but closing needs an explanation.
-    if (changed && CLOSING_STATUSES.includes(newStatus) && !remark) {
-      throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', {
-        remark: 'Add a remark explaining the outcome',
-      });
+
+    let rejectionReason = null;
+    if (changed && newStatus === 'rejected') {
+      if (!reason) {
+        throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', {
+          rejection_reason: 'Enter the reason for rejecting this issue',
+        });
+      }
+      if (reason.length < 5) {
+        throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', {
+          rejection_reason: 'The reason must be at least 5 characters',
+        });
+      }
+      rejectionReason = reason;
     }
 
     await db.query(
-      `INSERT INTO issue_updates (issue_id, corporator_id, status, remark, photos)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [issue.id, corporatorId, newStatus, remark ?? null, photos],
+      `INSERT INTO issue_updates (issue_id, corporator_id, status, remark, rejection_reason, photos)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [issue.id, corporatorId, newStatus, remark ?? null, rejectionReason, photos],
     );
     await db.query(
       `UPDATE issues
@@ -206,4 +243,65 @@ export async function addUpdate(publicId, corporatorId, { status, remark, photos
     );
   });
   return getIssue(publicId, { corporatorId });
+}
+
+/** Constituencies (other than the corporator's own) that have an active corporator to receive a transfer. */
+export async function listTransferTargets(corporatorId) {
+  const { rows } = await query(
+    `SELECT w.id, w.number, w.name
+       FROM wards w
+       JOIN corporators c ON c.ward_id = w.id AND c.is_active = true
+      WHERE w.id <> (SELECT ward_id FROM corporators WHERE id = $1)
+      ORDER BY w.number`,
+    [corporatorId],
+  );
+  return rows;
+}
+
+/**
+ * Move an open issue to another constituency. It goes to that constituency's corporator, restarts as
+ * 'submitted' (so they see it as new), and the history records the transfer. The sender loses access.
+ */
+export async function transferIssue(publicId, corporatorId, { ward_id: targetWardId, note }) {
+  return withTransaction(async (db) => {
+    const { rows } = await db.query(
+      'SELECT id, status, ward_id FROM issues WHERE public_id = $1 AND corporator_id = $2 FOR UPDATE',
+      [publicId, corporatorId],
+    );
+    const issue = rows[0];
+    if (!issue) throw new HttpError(404, 'not_found', 'Issue not found');
+
+    if (!OPEN_STATUSES.includes(issue.status)) {
+      throw new HttpError(400, 'not_transferable', 'Only open issues can be transferred');
+    }
+    if (targetWardId === issue.ward_id) {
+      throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', {
+        ward_id: 'Choose a different constituency',
+      });
+    }
+    const target = (await db.query(
+      `SELECT w.id, w.number, w.name, c.id AS corporator_id
+         FROM wards w JOIN corporators c ON c.ward_id = w.id AND c.is_active = true
+        WHERE w.id = $1`,
+      [targetWardId],
+    )).rows[0];
+    if (!target) {
+      throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', {
+        ward_id: 'That constituency has no active corporator to receive the issue',
+      });
+    }
+
+    await db.query(
+      `UPDATE issues
+          SET ward_id = $2, corporator_id = $3, status = 'submitted', resolved_at = NULL, updated_at = now()
+        WHERE id = $1`,
+      [issue.id, target.id, target.corporator_id],
+    );
+    await db.query(
+      `INSERT INTO issue_updates (issue_id, corporator_id, status, remark, event, from_ward_id, to_ward_id)
+       VALUES ($1, $2, 'submitted', $3, 'transfer', $4, $5)`,
+      [issue.id, corporatorId, note ?? null, issue.ward_id, target.id],
+    );
+    return { number: target.number, name: target.name };
+  });
 }

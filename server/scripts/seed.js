@@ -68,7 +68,9 @@ async function main() {
         const status = statuses[(n + k) % statuses.length];
         if (status) {
           const remark = status === 'rejected' ? 'Not under municipal jurisdiction.' : `Marked ${status.replace('_', ' ')}.`;
-          await addUpdate(issue.public_id, ward.corporator_id, { status, remark, photos: [] });
+          await addUpdate(issue.public_id, ward.corporator_id, {
+            status, remark, photos: [], rejection_reason: status === 'rejected' ? 'Not under municipal jurisdiction.' : undefined,
+          });
         }
       }
       n += 1;

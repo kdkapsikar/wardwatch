@@ -1,9 +1,23 @@
-export default function StatCard({ label, value, hint, tone = 'text-slate-900' }) {
-  return (
-    <div className="card p-4">
+import { Link } from 'react-router-dom';
+
+/** A number with a label. Pass `to` to make the whole card a drill-down link. */
+export default function StatCard({ label, value, hint, tone = 'text-slate-900', to }) {
+  const body = (
+    <>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone}`}>{value}</p>
       {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
-    </div>
+    </>
+  );
+  if (!to) return <div className="card p-4">{body}</div>;
+  return (
+    <Link
+      to={to}
+      aria-label={`${label}: ${value}. View these issues`}
+      className="card block p-4 transition hover:border-brand-600 hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+    >
+      {body}
+      <p className="mt-1 text-xs font-medium text-brand-700">View issues &rarr;</p>
+    </Link>
   );
 }

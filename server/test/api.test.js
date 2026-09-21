@@ -386,12 +386,9 @@ describe('corporator flow', () => {
     assert.equal(pub.body.issue.updates[0].by, null);
   });
 
-  test('closing an issue requires a remark; empty updates are rejected', async () => {
+  test('empty updates and the internal "submitted" status are rejected', async () => {
     const id = await fileIssue(ctx.ward1);
     const corp = await login('corp1');
-    const noRemark = await corp('POST', `/api/corporator/issues/${id}/updates`, { form: updateForm({ status: 'rejected' }) });
-    assert.equal(noRemark.status, 400);
-    assert.ok(noRemark.body.error.fields.remark);
     const empty = await corp('POST', `/api/corporator/issues/${id}/updates`, { form: updateForm({}) });
     assert.equal(empty.status, 400);
     const invalid = await corp('POST', `/api/corporator/issues/${id}/updates`, { form: updateForm({ status: 'submitted', remark: 'x' }) });
@@ -419,6 +416,197 @@ describe('corporator flow', () => {
   });
 });
 
+describe('corporator portal: rejection, transfer, dashboard', () => {
+  const fileIssue = async (wardId, extra = {}) =>
+    (await client()('POST', '/api/issues', { form: issueForm({ ward_id: String(wardId), ...extra }) })).body.issue_id;
+  const login = async (username) => {
+    const api = client();
+    await api('POST', '/api/auth/login', { json: { username, password: 'correct-horse-1' } });
+    return api;
+  };
+  const form = (fields, files = []) => {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(fields)) f.append(k, v);
+    for (const file of files) f.append('photos', new Blob([file.data], { type: file.type }), file.name);
+    return f;
+  };
+  const post = (api, id, fields, files) => api('POST', `/api/corporator/issues/${id}/updates`, { form: form(fields, files) });
+  const publicIssue = async (id) => (await client()('GET', `/api/issues/${id}`)).body.issue;
+
+  test('the remark is optional: resolving needs nothing else', async () => {
+    const id = await fileIssue(ctx.ward1);
+    const corp = await login('corp1');
+    const res = await post(corp, id, { status: 'resolved' });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.issue.status, 'resolved');
+    assert.equal(res.body.issue.updates.at(-1).remark, null);
+  });
+
+  test('rejecting needs a reason; proof photos and remark are optional; the reason is public', async () => {
+    const id = await fileIssue(ctx.ward1);
+    const corp = await login('corp1');
+
+    const none = await post(corp, id, { status: 'rejected' });
+    assert.equal(none.status, 400);
+    assert.equal(none.body.error.fields.rejection_reason, 'Enter the reason for rejecting this issue');
+    const withRemarkOnly = await post(corp, id, { status: 'rejected', remark: 'A remark is not a reason' });
+    assert.equal(withRemarkOnly.status, 400);
+    assert.ok(withRemarkOnly.body.error.fields.rejection_reason);
+    const tooShort = await post(corp, id, { status: 'rejected', rejection_reason: 'no' });
+    assert.equal(tooShort.status, 400);
+    assert.match(tooShort.body.error.fields.rejection_reason, /at least 5/);
+    assert.equal((await publicIssue(id)).status, 'submitted', 'failed rejections must not change the issue');
+
+    const ok = await post(corp, id, { status: 'rejected', rejection_reason: 'Duplicate of an existing complaint' }, [
+      { data: PNG, type: 'image/png', name: 'proof.png' },
+    ]);
+    assert.equal(ok.status, 201);
+    const last = (await publicIssue(id)).updates.at(-1);
+    assert.equal(last.status, 'rejected');
+    assert.equal(last.rejection_reason, 'Duplicate of an existing complaint');
+    assert.equal(last.remark, null);
+    assert.equal(last.photos.length, 1);
+
+    // adding a note to an already-rejected issue does not need a new reason
+    assert.equal((await post(corp, id, { remark: 'Called the citizen to explain' })).status, 201);
+  });
+
+  test('a rejection reason sent with a non-rejection is not stored', async () => {
+    const id = await fileIssue(ctx.ward1);
+    const corp = await login('corp1');
+    assert.equal((await post(corp, id, { status: 'in_progress', rejection_reason: 'should be ignored' })).status, 201);
+    const { rows } = await query('SELECT rejection_reason FROM issue_updates u JOIN issues i ON i.id = u.issue_id WHERE i.public_id = $1 ORDER BY u.id DESC LIMIT 1', [id]);
+    assert.equal(rows[0].rejection_reason, null);
+  });
+
+  test('transfer: the issue moves to the other constituency\'s corporator and the history records it', async () => {
+    const id = await fileIssue(ctx.ward1);
+    const corp1 = await login('corp1');
+    await post(corp1, id, { status: 'in_progress', remark: 'Started' });
+
+    const res = await corp1('POST', `/api/corporator/issues/${id}/transfer`, { json: { ward_id: ctx.ward2, note: 'This street is in your constituency' } });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.transferred_to.number, 2);
+
+    // sender lost access; receiver has it, restarted as "submitted"
+    assert.equal((await corp1('GET', `/api/corporator/issues/${id}`)).status, 404);
+    assert.equal((await post(corp1, id, { remark: 'still mine?' })).status, 404);
+    const corp2 = await login('corp2');
+    const seen = await corp2('GET', `/api/corporator/issues/${id}`);
+    assert.equal(seen.status, 200);
+    assert.equal(seen.body.issue.status, 'submitted');
+    assert.equal(seen.body.issue.ward.number, 2);
+    assert.deepEqual((await corp2('GET', '/api/corporator/issues')).body.issues.map((i) => i.public_id), [id]);
+    assert.equal((await corp1('GET', '/api/corporator/issues')).body.issues.length, 0);
+
+    // public history shows the transfer (who, from, to, note) and the new constituency
+    const pub = await publicIssue(id);
+    assert.equal(pub.ward.number, 2);
+    const t = pub.updates.at(-1);
+    assert.equal(t.event, 'transfer');
+    assert.equal(t.by, 'Corp One');
+    assert.equal(t.remark, 'This street is in your constituency');
+    assert.deepEqual([t.transfer.from.number, t.transfer.to.number], [1, 2]);
+    assert.equal(pub.updates.at(-2).event, 'update');
+
+    // the receiving corporator can carry on, and can even send it back
+    assert.equal((await post(corp2, id, { status: 'acknowledged' })).status, 201);
+    assert.equal((await corp2('POST', `/api/corporator/issues/${id}/transfer`, { json: { ward_id: ctx.ward1 } })).status, 200);
+  });
+
+  test('transfer rules: same/unstaffed/unknown constituency, closed issues, foreign issues, roles', async () => {
+    const id = await fileIssue(ctx.ward1);
+    const corp1 = await login('corp1');
+    const tryTransfer = (api, issueId, body) => api('POST', `/api/corporator/issues/${issueId}/transfer`, { json: body });
+
+    const same = await tryTransfer(corp1, id, { ward_id: ctx.ward1 });
+    assert.equal(same.status, 400);
+    assert.match(same.body.error.fields.ward_id, /different constituency/);
+    const unstaffed = await tryTransfer(corp1, id, { ward_id: ctx.ward3 });
+    assert.equal(unstaffed.status, 400);
+    assert.match(unstaffed.body.error.fields.ward_id, /no active corporator/);
+    assert.equal((await tryTransfer(corp1, id, { ward_id: 999999 })).status, 400);
+    assert.equal((await tryTransfer(corp1, id, {})).status, 400);
+    assert.equal((await publicIssue(id)).ward.number, 1, 'failed transfers must not move the issue');
+
+    await post(corp1, id, { status: 'resolved' });
+    const closed = await tryTransfer(corp1, id, { ward_id: ctx.ward2 });
+    assert.equal(closed.status, 400);
+    assert.equal(closed.body.error.code, 'not_transferable');
+
+    const foreign = await fileIssue(ctx.ward2);
+    assert.equal((await tryTransfer(corp1, foreign, { ward_id: ctx.ward1 })).status, 404);
+    assert.equal((await tryTransfer(client(), id, { ward_id: ctx.ward2 })).status, 401);
+    const admin = client();
+    await admin('POST', '/api/auth/login', { json: { username: 'admin', password: 'correct-horse-1' } });
+    assert.equal((await tryTransfer(admin, id, { ward_id: ctx.ward2 })).status, 403);
+  });
+
+  test('transfer targets: other constituencies with an active corporator', async () => {
+    const corp1 = await login('corp1');
+    const targets = await corp1('GET', '/api/corporator/transfer-targets');
+    assert.deepEqual(targets.body.wards.map((w) => w.number), [2]); // ward 3 has no corporator; own ward excluded
+    await query("UPDATE corporators SET is_active = false WHERE username = 'corp2'");
+    assert.deepEqual((await corp1('GET', '/api/corporator/transfer-targets')).body.wards, []);
+    const noTarget = await fileIssue(ctx.ward1);
+    assert.equal((await corp1('POST', `/api/corporator/issues/${noTarget}/transfer`, { json: { ward_id: ctx.ward2 } })).status, 400);
+  });
+
+  test('dashboard: only my numbers, with drill-down data', async () => {
+    const [a, b, c, old] = [await fileIssue(ctx.ward1, { category: 'roads' }), await fileIssue(ctx.ward1, { category: 'water' }),
+      await fileIssue(ctx.ward1, { category: 'roads' }), await fileIssue(ctx.ward1, { category: 'roads' })];
+    await fileIssue(ctx.ward2, { category: 'roads' }); // someone else's
+    const corp1 = await login('corp1');
+    await post(corp1, a, { status: 'resolved' });
+    await post(corp1, b, { status: 'rejected', rejection_reason: 'Not a civic issue' });
+    await post(corp1, c, { status: 'in_progress' });
+    await query("UPDATE issues SET created_at = now() - interval '10 days' WHERE public_id = $1", [old]);
+
+    const { status, body } = await corp1('GET', '/api/corporator/dashboard');
+    assert.equal(status, 200);
+    const t = body.totals;
+    assert.deepEqual([t.total, t.resolved, t.rejected, t.open, t.in_progress, t.submitted, t.overdue], [4, 1, 1, 2, 1, 1, 1]);
+    assert.equal(t.resolution_rate, 33.3); // 1 / (4 - 1)
+    assert.equal(t.received_30d, 4);
+    assert.equal(t.resolved_30d, 1);
+    assert.equal(typeof t.avg_resolution_hours, 'number');
+    assert.deepEqual(body.by_category, [
+      { category: 'roads', total: 3, open: 2, resolved: 1, rejected: 0 },
+      { category: 'water', total: 1, open: 0, resolved: 0, rejected: 1 },
+    ]);
+    assert.equal(body.needs_attention[0].public_id, old); // oldest open first
+    assert.ok(body.needs_attention[0].age_days >= 10);
+    assert.equal(body.needs_attention.length, 2);
+    assert.equal(body.overdue_days, 7);
+
+    const other = (await (await login('corp2'))('GET', '/api/corporator/dashboard')).body;
+    assert.equal(other.totals.total, 1);
+    assert.equal((await client()('GET', '/api/corporator/dashboard')).status, 401);
+    const admin = client();
+    await admin('POST', '/api/auth/login', { json: { username: 'admin', password: 'correct-horse-1' } });
+    assert.equal((await admin('GET', '/api/corporator/dashboard')).status, 403);
+  });
+
+  test('issue list drill-down filters: status, category, overdue (counts follow the filters)', async () => {
+    const [r1, w1, r2] = [await fileIssue(ctx.ward1, { category: 'roads' }), await fileIssue(ctx.ward1, { category: 'water' }), await fileIssue(ctx.ward1, { category: 'roads' })];
+    const corp1 = await login('corp1');
+    await post(corp1, r2, { status: 'resolved' });
+    await query("UPDATE issues SET created_at = now() - interval '9 days' WHERE public_id = ANY($1)", [[r1, r2]]);
+    const list = async (qs) => (await corp1('GET', `/api/corporator/issues${qs}`)).body;
+    const ids = (body) => body.issues.map((i) => i.public_id).sort();
+
+    assert.deepEqual(ids(await list('?status=all')), [r1, w1, r2].sort());
+    assert.deepEqual(ids(await list('?category=roads&status=all')), [r1, r2].sort());
+    assert.deepEqual(ids(await list('?category=roads&status=open')), [r1]);
+    assert.deepEqual(ids(await list('?overdue=1&status=open')), [r1]);      // r2 is old but resolved; w1 is new
+    assert.deepEqual(ids(await list('?overdue=1')), [r1]);
+    const roads = await list('?category=roads&status=all');
+    assert.deepEqual([roads.counts.submitted, roads.counts.resolved, roads.total], [1, 1, 2]);
+    assert.equal(roads.counts.water, undefined);
+    assert.equal((await corp1('GET', '/api/corporator/issues?category=bogus')).status, 400);
+  });
+});
+
 describe('admin dashboard', () => {
   test('aggregates ward counts, resolution stats and corporator performance', async () => {
     const submit = async (wardId) =>
@@ -429,7 +617,8 @@ describe('admin dashboard', () => {
     const corp1 = client();
     await corp1('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
     const up = (id, status, remark) => {
-      const form = new FormData(); form.append('status', status); form.append('remark', remark);
+      const form = new FormData(); form.append('status', status);
+      if (status === 'rejected') form.append('rejection_reason', remark); else form.append('remark', remark);
       return corp1('POST', `/api/corporator/issues/${id}/updates`, { form });
     };
     await up(a, 'resolved', 'fixed');

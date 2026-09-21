@@ -31,7 +31,7 @@ erDiagram
 | `corporators` | **One per ward** (`ward_id` is UNIQUE, i.e. one corporator per constituency). Username unique case-insensitively (`lower(username)` index). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
 | `admins` | Mayor / admin accounts, same shape as corporators minus the ward. |
 | `issues` | `title` is a one-line headline **generated from the description** (first ~80 characters, cut at a word boundary; `server/src/lib/title.js`) - the form doesn't collect one and any `title` a client sends is ignored. `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
-| `issue_updates` | Append-only history. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |
+| `issue_updates` | Append-only history. `event` is `update` (status/remark/photos) or `transfer` (with `from_ward_id` / `to_ward_id`). `rejection_reason` is set when a corporator rejects (required by the API; NULL on older rows, whose explanation is in `remark`); proof photos use `photos`. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |
 | `sessions` | Opaque bearer token → only its SHA-256 is stored. Expired rows are purged hourly. |
 | `photos` | Uploaded images (`name`, `content_type`, `data BYTEA`, ≤ 5 MB). `issues.photos` / `issue_updates.photos` hold `/uploads/<name>` URL paths that the API resolves against this table. Stored in the DB so they survive hosts with ephemeral disks. |
 
@@ -70,9 +70,12 @@ All JSON under `/api`. Errors always look like
 
 | Method & path | Body / query | Response |
 | --- | --- | --- |
-| `GET /api/corporator/issues` | `?status=open\|submitted\|acknowledged\|in_progress\|resolved\|rejected&page=1` | `{ issues[], total, page, page_size, counts: { <status>: n } }` - own issues only, open first |
+| `GET /api/corporator/issues` | `?status=open\|submitted\|acknowledged\|in_progress\|resolved\|rejected\|all&category=roads&overdue=1&page=1` | `{ issues[], total, page, page_size, counts: { <status>: n } }` - own issues only, open first |
 | `GET /api/corporator/issues/:publicId` | - | `{ issue }` incl. `citizen: { name, phone }` and `location: { latitude, longitude } \| null`; `404` if not theirs |
-| `POST /api/corporator/issues/:publicId/updates` | multipart: `status?, remark?, photos[]` | `201 { issue }` (updated). Needs a status change, remark or photo; `resolved`/`rejected` require a remark |
+| `GET /api/corporator/dashboard` | - | `{ totals, by_category[], needs_attention[], overdue_days }` - the corporator's own numbers (same definitions as the admin dashboard) plus `received_30d` / `resolved_30d` |
+| `GET /api/corporator/transfer-targets` | - | `{ wards: [{ id, number, name }] }` - other constituencies with an active corporator |
+| `POST /api/corporator/issues/:publicId/updates` | multipart: `status?, remark?, rejection_reason?, photos[]` | `201 { issue }` (updated). Needs a status change, remark or photo. **Remark is optional.** Changing the status to `rejected` **requires `rejection_reason`** (5-500 chars); photos then act as proof |
+| `POST /api/corporator/issues/:publicId/transfer` | JSON `{ ward_id, note? }` | `200 { transferred_to: { number, name } }`. Only open issues; target must differ from the current constituency and have an active corporator. The issue restarts as `submitted` for the new corporator; `404` for the sender afterwards |
 
 ### Admin (`403` for other roles)
 
@@ -94,8 +97,9 @@ falls back to the React app's `index.html`.
 | `/submitted/:id` | `IssueSubmitted` (shows/copies the Issue ID) | public |
 | `/track`, `/track/:id` | `TrackIssue` | public |
 | `/login` | `Login` (shared by corporators and admins; `/corporator/login`, `/admin/login` redirect here) | public |
-| `/corporator` | `CorporatorIssues` (tabs: open / resolved / rejected / all, paged) | corporator |
-| `/corporator/issues/:id` | `CorporatorIssueDetail` (details, update form, history) | corporator |
+| `/corporator` | `CorporatorDashboard` (own numbers; every figure links to a filtered list) | corporator |
+| `/corporator/issues` | `CorporatorIssues` (status chips + category/overdue filter chips, from URL params; paged) | corporator |
+| `/corporator/issues/:id` | `CorporatorIssueDetail` (details, status buttons + rejection panel, transfer, history) | corporator |
 | `/admin` | `AdminDashboard` | admin |
 | `*` | `NotFound` | - |
 
@@ -128,11 +132,13 @@ main.jsx
             │   │       └─ PhotoGallery
             │   ├─ Login                 (Alert, FormField, show/hide password)
             │   ├─ ProtectedRoute role="corporator"
-            │   │   ├─ CorporatorIssues  (Alert, Spinner, StatusBadge)
+            │   │   ├─ CorporatorDashboard (StatCard links, StatusBar, needs-attention list, category table)
+            │   │   ├─ CorporatorIssues  (status + filter chips, Alert, Spinner, StatusBadge)
             │   │   └─ CorporatorIssueDetail
             │   │       ├─ IssueDetails  (+ citizen contact)
-            │   │       ├─ UpdateForm    (Alert, FormField, PhotoUploader)
-            │   │       └─ IssueTimeline
+            │   │       ├─ UpdateForm    (StatusButtons, rejection reason + PhotoUploader proof, FormField)
+            │   │       ├─ TransferPanel (FormField, two-step confirm)
+            │   │       └─ IssueTimeline (rejection reasons, transfer events)
             │   ├─ ProtectedRoute role="admin"
             │   │   └─ AdminDashboard    (StatCard ×5, WardBar per ward, performance table)
             │   └─ NotFound

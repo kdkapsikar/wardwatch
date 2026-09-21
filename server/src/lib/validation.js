@@ -81,19 +81,28 @@ export const loginSchema = z.object({
   password: z.preprocess((v) => (typeof v === 'string' ? v : ''), z.string().min(1, 'Password is required').max(200)),
 });
 
-// "Closing needs a remark" is enforced in services/issues.js, where the current status is known.
+// The remark is always optional. Rejecting requires a rejection_reason - enforced in
+// services/issues.js, where the issue's current status is known.
 export const updateSchema = z.object({
   status: z.preprocess(
     (v) => (v === '' || v === undefined ? undefined : v),
     z.enum(CORPORATOR_STATUSES, { message: 'Invalid status' }).optional(),
   ),
   remark: optionalText('Remark', 1000),
+  rejection_reason: optionalText('Rejection reason', 500),
+});
+
+export const transferSchema = z.object({
+  ward_id: z.preprocess((v) => Number(v), z.number().int().positive('Choose a constituency')),
+  note: optionalText('Note', 500),
 });
 
 export const listQuerySchema = z.object({
   status: z.preprocess(
-    (v) => (v === '' ? undefined : v),
+    (v) => (v === '' || v === 'all' ? undefined : v),
     z.enum(['submitted', 'acknowledged', 'in_progress', 'resolved', 'rejected', 'open']).optional(),
   ),
+  category: z.preprocess((v) => (v === '' ? undefined : v), z.enum(CATEGORIES).optional()),
+  overdue: z.preprocess((v) => v === '1' || v === 'true', z.boolean()),
   page: z.preprocess((v) => (v === undefined ? 1 : Number(v)), z.number().int().min(1).max(10_000)),
 });

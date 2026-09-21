@@ -7,6 +7,7 @@ import IssueSubmitted from './pages/IssueSubmitted.jsx';
 import TrackIssue from './pages/TrackIssue.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Login from './pages/Login.jsx';
+import CorporatorDashboard from './pages/corporator/CorporatorDashboard.jsx';
 import CorporatorIssues from './pages/corporator/CorporatorIssues.jsx';
 import CorporatorIssueDetail from './pages/corporator/CorporatorIssueDetail.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
@@ -29,7 +30,8 @@ export default function App() {
 
         {/* Corporator */}
         <Route path="corporator" element={<ProtectedRoute role="corporator" />}>
-          <Route index element={<CorporatorIssues />} />
+          <Route index element={<CorporatorDashboard />} />
+          <Route path="issues" element={<CorporatorIssues />} />
           <Route path="issues/:id" element={<CorporatorIssueDetail />} />
         </Route>
 

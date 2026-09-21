@@ -9,7 +9,7 @@ mayor / admin gets a city-wide dashboard.
 | Who | What they can do |
 | --- | --- |
 | **Citizen** (no login) | Report an issue with photos, a pin on the map (GPS or tap), constituency, name and phone → receive an Issue ID → look it up later and see the full update history |
-| **Corporator** (username + password) | See issues assigned to their constituency, change status, add remarks and photos |
+| **Corporator** (username + password) | Own dashboard with drill-down, see their constituency's issues, change status with one-tap buttons, reject with a mandatory reason (+ optional proof photos), add optional remarks and photos, transfer an issue to another constituency |
 | **Mayor / Admin** (username + password) | Constituency-wise issue counts, resolution statistics, corporator performance summary |
 
 Deliberately **not** in V1: OTP, JWT, SMS/email, GIS analysis. The one external service is the free
@@ -61,6 +61,19 @@ configuration is needed.
 createdb wardwatch && createdb wardwatch_test
 # then set DATABASE_URL / TEST_DATABASE_URL in server/.env to match your Postgres user
 ```
+
+## Corporator portal
+
+- **Dashboard** (`/corporator`) - only the signed-in corporator's own numbers: assigned / open / overdue / resolved /
+  rejected, resolution rate, average time to resolve, the last 30 days, a status breakdown, the oldest open issues
+  ("needs attention") and a per-category table. **Every number is a link** into the issue list, pre-filtered
+  (`/corporator/issues?status=open&overdue=1`, `?category=roads&status=all`, ...). The list shows removable filter chips.
+- **Updating an issue** - status is a row of buttons (Acknowledged / In progress / Resolved / Rejected), not a dropdown.
+  The **remark is always optional**. **Rejecting requires a reason** (quick-pick reasons are provided); proof photos can
+  be attached and, like the reason, are shown to the citizen on the tracking page.
+- **Transfer** - an open issue can be moved to another constituency that has an active corporator. It leaves the
+  sender's list, goes to that corporator as a new "Submitted" issue, and the history records who moved it, from where,
+  to where, and an optional note. The sender can no longer open it.
 
 ## Report form rules
 

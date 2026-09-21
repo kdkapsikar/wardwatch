@@ -1,11 +1,11 @@
 // Keep in sync with server/src/lib/constants.js and the DB CHECK constraints.
 
 export const STATUS = {
-  submitted:    { label: 'Submitted',    badge: 'bg-slate-100 text-slate-700 ring-slate-300',   bar: 'bg-slate-400',   dot: 'bg-slate-400' },
-  acknowledged: { label: 'Acknowledged', badge: 'bg-sky-50 text-sky-800 ring-sky-200',          bar: 'bg-sky-500',     dot: 'bg-sky-500' },
-  in_progress:  { label: 'In progress',  badge: 'bg-amber-50 text-amber-800 ring-amber-200',    bar: 'bg-amber-500',   dot: 'bg-amber-500' },
-  resolved:     { label: 'Resolved',     badge: 'bg-emerald-50 text-emerald-800 ring-emerald-200', bar: 'bg-emerald-500', dot: 'bg-emerald-500' },
-  rejected:     { label: 'Rejected',     badge: 'bg-rose-50 text-rose-800 ring-rose-200',       bar: 'bg-rose-400',    dot: 'bg-rose-400' },
+  submitted:    { label: 'Submitted',    badge: 'bg-slate-100 text-slate-700 ring-slate-300',   bar: 'bg-slate-400',   dot: 'bg-slate-400', solid: 'bg-slate-600 text-white border-slate-600' },
+  acknowledged: { label: 'Acknowledged', badge: 'bg-sky-50 text-sky-800 ring-sky-200',          bar: 'bg-sky-500',     dot: 'bg-sky-500', solid: 'bg-sky-600 text-white border-sky-600' },
+  in_progress:  { label: 'In progress',  badge: 'bg-amber-50 text-amber-800 ring-amber-200',    bar: 'bg-amber-500',   dot: 'bg-amber-500', solid: 'bg-amber-500 text-white border-amber-500' },
+  resolved:     { label: 'Resolved',     badge: 'bg-emerald-50 text-emerald-800 ring-emerald-200', bar: 'bg-emerald-500', dot: 'bg-emerald-500', solid: 'bg-emerald-600 text-white border-emerald-600' },
+  rejected:     { label: 'Rejected',     badge: 'bg-rose-50 text-rose-800 ring-rose-200',       bar: 'bg-rose-400',    dot: 'bg-rose-400', solid: 'bg-rose-600 text-white border-rose-600' },
 };
 
 export const STATUS_ORDER = ['submitted', 'acknowledged', 'in_progress', 'resolved', 'rejected'];
@@ -35,3 +35,12 @@ const [centerLat, centerLng] = (import.meta.env.VITE_MAP_CENTER ?? '').split(','
 export const DEFAULT_MAP_CENTER =
   Number.isFinite(centerLat) && Number.isFinite(centerLng) ? [centerLat, centerLng] : [20.5937, 78.9629];
 export const DEFAULT_MAP_ZOOM = Number(import.meta.env.VITE_MAP_ZOOM) || (import.meta.env.VITE_MAP_CENTER ? 13 : 5);
+
+// One-tap starting points for the rejection reason (the corporator can edit the text afterwards).
+export const REJECTION_SUGGESTIONS = [
+  'Duplicate of an existing complaint',
+  'Not under municipal jurisdiction',
+  'Insufficient details to act on',
+  'Already resolved',
+  'Not a civic issue',
+];

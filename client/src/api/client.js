@@ -69,12 +69,17 @@ export const api = {
     }
   },
   // corporator
-  listAssigned: ({ status, page }) => {
+  getCorporatorDashboard: () => request('/corporator/dashboard'),
+  listAssigned: ({ status, page, category, overdue }) => {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
+    if (category) params.set('category', category);
+    if (overdue) params.set('overdue', '1');
     if (page > 1) params.set('page', String(page));
     return request(`/corporator/issues?${params}`);
   },
+  getTransferTargets: () => request('/corporator/transfer-targets'),
+  transferIssue: (id, body) => request(`/corporator/issues/${encodeURIComponent(id)}/transfer`, { method: 'POST', json: body }),
   getAssigned: (id) => request(`/corporator/issues/${encodeURIComponent(id)}`),
   postUpdate: (id, form) => request(`/corporator/issues/${encodeURIComponent(id)}/updates`, { method: 'POST', form }),
   // admin
