@@ -1,5 +1,6 @@
 import { query } from '../db/pool.js';
 import { config } from '../config.js';
+import { notesSummary } from './notes.js';
 
 // Definitions used everywhere on the dashboard:
 //   open            = submitted + acknowledged + in_progress
@@ -24,9 +25,9 @@ export const withRate = (row) => {
   return { ...row, resolution_rate: denominator > 0 ? Math.round((row.resolved / denominator) * 1000) / 10 : null };
 };
 
-export async function getDashboard() {
+export async function getDashboard(adminId) {
   const params = [config.overdueDays];
-  const [totals, wards, corporators, unassigned] = await Promise.all([
+  const [totals, wards, corporators, unassigned, byCategory, myNotes] = await Promise.all([
     query(`SELECT ${AGG} FROM issues i`, params),
     query(
       `SELECT w.id AS ward_id, w.number AS ward_number, w.name AS ward_name,
@@ -49,6 +50,15 @@ export async function getDashboard() {
       params,
     ),
     query('SELECT count(*)::int AS n FROM issues WHERE corporator_id IS NULL'),
+    query(
+      `SELECT i.category,
+              count(*)::int AS total,
+              count(*) FILTER (WHERE i.status IN ('submitted','acknowledged','in_progress'))::int AS open,
+              count(*) FILTER (WHERE i.status = 'resolved')::int AS resolved,
+              count(*) FILTER (WHERE i.status = 'rejected')::int AS rejected
+         FROM issues i GROUP BY i.category ORDER BY total DESC, i.category`,
+    ),
+    notesSummary(adminId), // the requesting admin's OWN notes only
   ]);
 
   return {
@@ -57,6 +67,8 @@ export async function getDashboard() {
     totals: { ...withRate(totals.rows[0]), unassigned: unassigned.rows[0].n },
     wards: wards.rows.map(withRate),
     corporators: corporators.rows.map(withRate),
+    by_category: byCategory.rows,
+    my_notes: myNotes,
   };
 }
 

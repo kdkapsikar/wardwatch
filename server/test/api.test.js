@@ -607,6 +607,182 @@ describe('corporator portal: rejection, transfer, dashboard', () => {
   });
 });
 
+describe('admin portal: category drill-down, records, private notes', () => {
+  const asAdmin = async (username = 'admin') => {
+    const api = client();
+    const res = await api('POST', '/api/auth/login', { json: { username, password: 'correct-horse-1' } });
+    assert.equal(res.status, 200, `login ${username}`);
+    return api;
+  };
+  const fileIssue = async (wardId, extra = {}) =>
+    (await client()('POST', '/api/issues', { form: issueForm({ ward_id: String(wardId), ...extra }) })).body.issue_id;
+  const secondAdmin = async () => {
+    await query('INSERT INTO admins (name, username, password_hash) VALUES ($1, $2, $3)', ['Deputy', 'admin2', await bcrypt.hash('correct-horse-1', 4)]);
+  };
+  const resolve = async (issueId) => {
+    const corp = client();
+    await corp('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    const form = new FormData(); form.append('status', 'resolved');
+    return corp('POST', `/api/corporator/issues/${issueId}/updates`, { form });
+  };
+
+  test('dashboard: category split city-wide, ready for the pie chart', async () => {
+    const [r1, r2] = [await fileIssue(ctx.ward1, { category: 'roads' }), await fileIssue(ctx.ward1, { category: 'roads' })];
+    await fileIssue(ctx.ward2, { category: 'roads' });
+    await fileIssue(ctx.ward1, { category: 'water' });
+    await resolve(r1); void r2;
+    const admin = await asAdmin();
+    const { body } = await admin('GET', '/api/admin/dashboard');
+    assert.deepEqual(body.by_category, [
+      { category: 'roads', total: 3, open: 2, resolved: 1, rejected: 0 },
+      { category: 'water', total: 1, open: 1, resolved: 0, rejected: 0 },
+    ]);
+    assert.equal(body.by_category.reduce((n, c) => n + c.total, 0), body.totals.total);
+    assert.deepEqual(body.my_notes, { count: 0, with_budget: 0, budget_total: 0 });
+  });
+
+  test('issue list (the drill-down target): filters, counts, corporator name, roles', async () => {
+    const roads1 = await fileIssue(ctx.ward1, { category: 'roads' });
+    const roads2 = await fileIssue(ctx.ward2, { category: 'roads' });
+    const water = await fileIssue(ctx.ward1, { category: 'water' });
+    const orphan = await fileIssue(ctx.ward3, { category: 'roads' }); // ward 3 has no corporator
+    await resolve(roads1);
+    await query("UPDATE issues SET created_at = now() - interval '9 days' WHERE public_id = ANY($1)", [[roads2, water]]);
+    const admin = await asAdmin();
+    const list = async (qs) => (await admin('GET', `/api/admin/issues${qs}`)).body;
+    const ids = (b) => b.issues.map((i) => i.public_id).sort();
+
+    assert.deepEqual(ids(await list('?status=all')), [roads1, roads2, water, orphan].sort());
+    assert.deepEqual(ids(await list('?category=roads&status=all')), [roads1, roads2, orphan].sort());
+    assert.deepEqual(ids(await list('?category=roads&status=open')), [roads2, orphan].sort());
+    assert.deepEqual(ids(await list('?ward=2&status=all')), [roads2]);
+    assert.deepEqual(ids(await list('?overdue=1&status=open')), [roads2, water].sort());
+    const roads = await list('?category=roads&status=all');
+    assert.deepEqual([roads.total, roads.counts.resolved, roads.counts.submitted], [3, 1, 2]);
+    assert.equal(roads.counts.water, undefined);
+    const byId = Object.fromEntries(roads.issues.map((i) => [i.public_id, i]));
+    assert.equal(byId[roads1].corporator_name, 'Corp One');
+    assert.equal(byId[orphan].corporator_name, null);
+    assert.equal(byId[roads2].ward.number, 2);
+    assert.equal((await admin('GET', '/api/admin/issues?category=bogus')).status, 400);
+    assert.equal((await admin('GET', '/api/admin/issues?ward=abc')).status, 400);
+
+    assert.equal((await client()('GET', '/api/admin/issues')).status, 401);
+    const corp = client();
+    await corp('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    assert.equal((await corp('GET', '/api/admin/issues')).status, 403);
+  });
+
+  test('the record: full read-only detail with contact, location and assigned corporator', async () => {
+    const id = await fileIssue(ctx.ward1, { category: 'drainage' });
+    await resolve(id);
+    const admin = await asAdmin();
+    const { status, body } = await admin('GET', `/api/admin/issues/${id.toLowerCase()}`); // sloppy IDs are fine
+    assert.equal(status, 200);
+    assert.equal(body.issue.public_id, id);
+    assert.equal(body.issue.citizen.phone, '9876543210');
+    assert.deepEqual(body.issue.location, { latitude: 18.52043, longitude: 73.856744 });
+    assert.equal(body.issue.assigned_to, 'Corp One');
+    assert.deepEqual(body.issue.updates.map((u) => u.status), ['submitted', 'resolved']);
+    assert.equal((await admin('GET', '/api/admin/issues/WW-AAAAAAAA')).status, 404);
+    assert.equal((await admin('GET', '/api/admin/issues/garbage')).status, 404);
+    const corp = client();
+    await corp('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    assert.equal((await corp('GET', `/api/admin/issues/${id}`)).status, 403);
+    assert.equal(JSON.stringify((await client()('GET', `/api/issues/${id}`)).body).includes('9876543210'), false);
+  });
+
+  test('notes: a note (with optional budget) is visible only to the admin who wrote it', async () => {
+    await secondAdmin();
+    const issue = await fileIssue(ctx.ward1);
+    const mayor = await asAdmin('admin');
+    const deputy = await asAdmin('admin2');
+
+    const general = await mayor('POST', '/api/admin/notes', { json: { body: 'Ring-fence funds for monsoon repairs', budget_amount: '\u20B9 1,25,000.50' } });
+    assert.equal(general.status, 201);
+    assert.equal(general.body.note.budget_amount, 125000.5);
+    assert.equal(general.body.note.issue, null);
+    const linked = await mayor('POST', '/api/admin/notes', { json: { body: 'Needs a new culvert - est. cost below', budget_amount: 40000, issue } });
+    assert.equal(linked.status, 201);
+    assert.equal(linked.body.note.issue.public_id, issue);
+    const noAmount = await mayor('POST', '/api/admin/notes', { json: { body: 'Just a reminder, no budget' } });
+    assert.equal(noAmount.body.note.budget_amount, null);
+
+    // the author sees all of them, with totals; the per-issue filter works
+    const mine = (await mayor('GET', '/api/admin/notes')).body;
+    assert.equal(mine.notes.length, 3);
+    assert.deepEqual(mine.totals, { count: 3, budget_total: 165000.5 });
+    assert.deepEqual((await mayor('GET', `/api/admin/notes?issue=${issue}`)).body.notes.map((n) => n.id), [linked.body.note.id]);
+    assert.equal((await mayor('GET', '/api/admin/dashboard')).body.my_notes.budget_total, 165000.5);
+
+    // another admin sees NOTHING of it - list, dashboard, update, delete
+    assert.deepEqual((await deputy('GET', '/api/admin/notes')).body, { notes: [], totals: { count: 0, budget_total: 0 } });
+    assert.deepEqual((await deputy('GET', `/api/admin/notes?issue=${issue}`)).body.notes, []);
+    assert.equal((await deputy('GET', '/api/admin/dashboard')).body.my_notes.count, 0);
+    const id = general.body.note.id;
+    assert.equal((await deputy('PUT', `/api/admin/notes/${id}`, { json: { body: 'hijacked', budget_amount: 1 } })).status, 404);
+    assert.equal((await deputy('DELETE', `/api/admin/notes/${id}`)).status, 404);
+    const still = (await mayor('GET', '/api/admin/notes')).body.notes.find((n) => n.id === id);
+    assert.equal(still.body, 'Ring-fence funds for monsoon repairs');
+    assert.equal(still.budget_amount, 125000.5);
+
+    // and nobody else can reach the endpoints at all
+    assert.equal((await client()('GET', '/api/admin/notes')).status, 401);
+    const corp = client();
+    await corp('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    for (const [m, u] of [['GET', '/api/admin/notes'], ['POST', '/api/admin/notes'], ['DELETE', `/api/admin/notes/${id}`]]) {
+      assert.equal((await corp(m, u, m === 'POST' ? { json: { body: 'x' } } : {})).status, 403, `${m} ${u}`);
+    }
+
+    // note text never leaks into any issue payload (public, corporator or admin record)
+    const payloads = [
+      JSON.stringify((await client()('GET', `/api/issues/${issue}`)).body),
+      JSON.stringify((await corp('GET', `/api/corporator/issues/${issue}`)).body),
+      JSON.stringify((await mayor('GET', `/api/admin/issues/${issue}`)).body),
+    ];
+    for (const p of payloads) assert.equal(p.includes('culvert'), false);
+  });
+
+  test('notes: create / edit / clear budget / delete, with validation', async () => {
+    const admin = await asAdmin();
+    const post = (json) => admin('POST', '/api/admin/notes', { json });
+    assert.equal((await post({ body: '' })).status, 400);
+    assert.equal((await post({ body: '   ' })).status, 400);
+    assert.equal((await post({ body: 'x'.repeat(2001) })).status, 400);
+    assert.match((await post({ body: 'ok', budget_amount: -5 })).body.error.fields.budget_amount, /negative/);
+    assert.equal((await post({ body: 'ok', budget_amount: 'abc' })).status, 400);
+    assert.equal((await post({ body: 'ok', budget_amount: '1e15' })).status, 400);
+    assert.equal((await post({ body: 'ok', issue: 'nonsense' })).status, 400);
+    assert.match((await post({ body: 'ok', issue: 'WW-AAAAAAAA' })).body.error.fields.issue, /not found/);
+    assert.equal((await admin('GET', '/api/admin/notes')).body.notes.length, 0, 'invalid notes must not be stored');
+
+    const created = (await post({ body: 'First draft', budget_amount: 1000.999 })).body.note;
+    assert.equal(created.budget_amount, 1001); // rounded to paise
+    const edited = await admin('PUT', `/api/admin/notes/${created.id}`, { json: { body: 'Revised', budget_amount: '2,50,000' } });
+    assert.equal(edited.status, 200);
+    assert.deepEqual([edited.body.note.body, edited.body.note.budget_amount], ['Revised', 250000]);
+    const cleared = await admin('PUT', `/api/admin/notes/${created.id}`, { json: { body: 'Revised', budget_amount: '' } });
+    assert.equal(cleared.body.note.budget_amount, null);
+    assert.equal((await admin('PUT', `/api/admin/notes/${created.id}`, { json: { body: '' } })).status, 400);
+
+    assert.equal((await admin('DELETE', `/api/admin/notes/${created.id}`)).status, 204);
+    assert.equal((await admin('DELETE', `/api/admin/notes/${created.id}`)).status, 404);
+    assert.equal((await admin('PUT', '/api/admin/notes/999999999', { json: { body: 'x' } })).status, 404);
+    assert.equal((await admin('DELETE', '/api/admin/notes/not-a-number')).status, 404); // not a 500
+  });
+
+  test('CORS preflight allows PUT and DELETE from the web app origin (notes are edited cross-origin)', async () => {
+    for (const method of ['PUT', 'DELETE']) {
+      const res = await fetch(`${base}/api/admin/notes/1`, {
+        method: 'OPTIONS',
+        headers: { origin: 'https://kdkapsikar.github.io', 'access-control-request-method': method, 'access-control-request-headers': 'authorization,content-type' },
+      });
+      assert.equal(res.status, 204);
+      assert.match(res.headers.get('access-control-allow-methods'), new RegExp(method));
+    }
+  });
+});
+
 describe('admin dashboard', () => {
   test('aggregates ward counts, resolution stats and corporator performance', async () => {
     const submit = async (wardId) =>

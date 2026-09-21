@@ -47,7 +47,7 @@ export function createApp() {
   if (config.corsOrigins.length > 0) {
     app.use('/api', cors({
       origin: config.corsOrigins,
-      methods: ['GET', 'POST'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
       allowedHeaders: ['Authorization', 'Content-Type'],
       maxAge: 600,
     }));

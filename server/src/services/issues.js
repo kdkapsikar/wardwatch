@@ -58,9 +58,10 @@ export async function createIssue({
  * Load one issue with its update history.
  *  - public view (default): no citizen contact details.
  *  - `corporatorId`: restricts to that corporator's issues and includes contact details + coordinates.
+ *  - `staff: true` (mayor/admin): any issue, with the same private fields plus the assigned corporator.
  * Returns null if not found (or not visible to that corporator).
  */
-export async function getIssue(publicId, { corporatorId } = {}) {
+export async function getIssue(publicId, { corporatorId, staff = false } = {}) {
   const params = [publicId];
   let scope = '';
   if (corporatorId !== undefined) {
@@ -71,8 +72,10 @@ export async function getIssue(publicId, { corporatorId } = {}) {
     `SELECT i.id, i.public_id, i.category, i.title, i.description, i.address, i.status, i.photos,
             i.created_at, i.updated_at, i.resolved_at, i.citizen_name, i.citizen_phone,
             i.latitude, i.longitude,
-            w.number AS ward_number, w.name AS ward_name
+            w.number AS ward_number, w.name AS ward_name,
+            c.name AS assigned_name
        FROM issues i JOIN wards w ON w.id = i.ward_id
+       LEFT JOIN corporators c ON c.id = i.corporator_id
       WHERE i.public_id = $1 ${scope}`,
     params,
   );
@@ -120,8 +123,9 @@ export async function getIssue(publicId, { corporatorId } = {}) {
       created_at: u.created_at,
     })),
   };
-  if (corporatorId !== undefined) {
+  if (corporatorId !== undefined || staff) {
     issue.citizen = { name: row.citizen_name, phone: row.citizen_phone };
+    issue.assigned_to = row.assigned_name; // null = unassigned
     // Precise coordinates are for the assigned corporator only, like the contact details.
     issue.location = row.latitude === null ? null : { latitude: row.latitude, longitude: row.longitude };
   }
@@ -129,49 +133,48 @@ export async function getIssue(publicId, { corporatorId } = {}) {
 }
 
 /**
- * Corporator's inbox: paged list plus per-status counts for the filter chips.
+ * Paged issue list with per-status counts for filter chips. Used by the corporator inbox
+ * (scope.corporatorId) and by the mayor/admin issue list (no scope; optional scope.wardNumber).
  * Filters: status ('open' = submitted/acknowledged/in_progress), category, overdue (open + older than
- * OVERDUE_DAYS). The counts honour category/overdue but not status, so chips always add up to the list.
+ * OVERDUE_DAYS). The counts honour every filter except status, so chips always add up to the list.
  */
-export async function listCorporatorIssues(corporatorId, { status, page, category, overdue }) {
-  const base = ['i.corporator_id = $1'];
-  const params = [corporatorId];
-  if (category) {
-    params.push(category);
-    base.push(`i.category = $${params.length}`);
-  }
+export async function listIssues({ corporatorId, wardNumber } = {}, { status, page, category, overdue }) {
+  const params = [];
+  const bind = (value) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+  const base = [];
+  if (corporatorId !== undefined) base.push(`i.corporator_id = ${bind(corporatorId)}`);
+  if (wardNumber !== undefined) base.push(`w.number = ${bind(wardNumber)}`);
+  if (category) base.push(`i.category = ${bind(category)}`);
   if (overdue) {
-    params.push(OPEN_STATUSES, config.overdueDays);
-    base.push(`i.status = ANY($${params.length - 1}) AND i.created_at < now() - make_interval(days => $${params.length})`);
+    base.push(`i.status = ANY(${bind(OPEN_STATUSES)}) AND i.created_at < now() - make_interval(days => ${bind(config.overdueDays)})`);
   }
-  const baseWhere = base.join(' AND ');
+  const baseWhere = base.length ? base.join(' AND ') : 'TRUE';
 
-  const listFilters = [...base];
+  // Bind the status filter last so `params` (used by the counts query) can stay a prefix of `listParams`.
+  const baseParams = [...params];
+  let where = baseWhere;
+  if (status === 'open') where += ` AND i.status = ANY(${bind(OPEN_STATUSES)})`;
+  else if (status) where += ` AND i.status = ${bind(status)}`;
   const listParams = [...params];
-  if (status === 'open') {
-    listParams.push(OPEN_STATUSES);
-    listFilters.push(`i.status = ANY($${listParams.length})`);
-  } else if (status) {
-    listParams.push(status);
-    listFilters.push(`i.status = $${listParams.length}`);
-  }
-  const where = listFilters.join(' AND ');
 
+  const from = `FROM issues i JOIN wards w ON w.id = i.ward_id LEFT JOIN corporators c ON c.id = i.corporator_id`;
   const [list, total, counts] = await Promise.all([
     query(
       `SELECT i.public_id, i.title, i.category, i.status, i.address, i.created_at, i.updated_at,
-              w.number AS ward_number, w.name AS ward_name
-         FROM issues i JOIN wards w ON w.id = i.ward_id
+              w.number AS ward_number, w.name AS ward_name, c.name AS corporator_name
+         ${from}
         WHERE ${where}
         ORDER BY (i.status IN ('resolved','rejected')), i.created_at DESC
         LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
       listParams,
     ),
-    query(`SELECT count(*)::int AS n FROM issues i WHERE ${where}`, listParams),
-    query(`SELECT i.status, count(*)::int AS n FROM issues i WHERE ${baseWhere} GROUP BY i.status`, params),
+    query(`SELECT count(*)::int AS n ${from} WHERE ${where}`, listParams),
+    query(`SELECT i.status, count(*)::int AS n ${from} WHERE ${baseWhere} GROUP BY i.status`, baseParams),
   ]);
 
-  const byStatus = Object.fromEntries(counts.rows.map((r) => [r.status, r.n]));
   return {
     issues: list.rows.map((r) => ({
       public_id: r.public_id,
@@ -180,15 +183,19 @@ export async function listCorporatorIssues(corporatorId, { status, page, categor
       status: r.status,
       address: r.address,
       ward: { number: r.ward_number, name: r.ward_name },
+      corporator_name: r.corporator_name, // null = unassigned
       created_at: r.created_at,
       updated_at: r.updated_at,
     })),
     total: total.rows[0].n,
     page,
     page_size: PAGE_SIZE,
-    counts: byStatus,
+    counts: Object.fromEntries(counts.rows.map((r) => [r.status, r.n])),
   };
 }
+
+/** Corporator's inbox: their own issues only. */
+export const listCorporatorIssues = (corporatorId, filters) => listIssues({ corporatorId }, filters);
 
 /**
  * Corporator posts an update (status change and/or remark and/or photos).

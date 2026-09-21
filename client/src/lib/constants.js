@@ -44,3 +44,18 @@ export const REJECTION_SUGGESTIONS = [
   'Already resolved',
   'Not a civic issue',
 ];
+
+// Pie-chart colours: one FIXED colour per category (colour follows the category, never its size or
+// rank), taken in order from the validated 8-hue categorical palette; "Other" is the neutral gray.
+// Order = slot order, which is what the palette's adjacent-colour checks were validated against.
+// Validated with the dataviz palette validator on the white card surface: every hard gate passes;
+// aqua/yellow/magenta are under 3:1 contrast, so the chart always ships a legend table with the values.
+export const CATEGORY_CHART = [
+  { key: 'water', color: '#2a78d6' },
+  { key: 'roads', color: '#eb6834' },
+  { key: 'sanitation', color: '#1baf7a' },
+  { key: 'streetlights', color: '#eda100' },
+  { key: 'drainage', color: '#e87ba4' },
+  { key: 'parks', color: '#008300' },
+  { key: 'other', color: '#898781' },
+];

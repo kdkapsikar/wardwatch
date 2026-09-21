@@ -106,3 +106,30 @@ export const listQuerySchema = z.object({
   overdue: z.preprocess((v) => v === '1' || v === 'true', z.boolean()),
   page: z.preprocess((v) => (v === undefined ? 1 : Number(v)), z.number().int().min(1).max(10_000)),
 });
+
+// Admin issue list: same filters as the corporator inbox plus a constituency number.
+export const adminListQuerySchema = listQuerySchema.extend({
+  ward: z.preprocess((v) => (v === undefined || v === '' ? undefined : Number(v)), z.number().int().min(1).max(10_000).optional()),
+});
+
+// Rupees, optional. Accepts 125000, "1,25,000.50", "₹ 1,25,000"; empty / null means "no amount".
+const MAX_BUDGET = 999_999_999_999.99;
+const budgetAmount = z.preprocess(
+  (v) => {
+    if (v === undefined || v === null) return null;
+    if (typeof v === 'number') return v;
+    const cleaned = String(v).replace(/[\s,\u20B9]/g, '');
+    return cleaned === '' ? null : Number(cleaned);
+  },
+  z
+    .number({ message: 'Enter a valid amount' })
+    .min(0, 'The amount cannot be negative')
+    .max(MAX_BUDGET, 'That amount is too large')
+    .transform((n) => Math.round(n * 100) / 100)
+    .nullable(),
+);
+
+export const noteSchema = z.object({
+  body: text('Note', { min: 1, max: 2000 }),
+  budget_amount: budgetAmount,
+});

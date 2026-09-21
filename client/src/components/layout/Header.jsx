@@ -28,6 +28,8 @@ export default function Header() {
             <>
               <NavLink to={auth.role === 'admin' ? '/admin' : '/corporator'} end className={navClass}>Dashboard</NavLink>
               {auth.role === 'corporator' && <NavLink to="/corporator/issues" className={navClass}>Issues</NavLink>}
+              {auth.role === 'admin' && <NavLink to="/admin/issues" className={navClass}>Issues</NavLink>}
+              {auth.role === 'admin' && <NavLink to="/admin/notes" className={navClass}>My notes</NavLink>}
               <button type="button" onClick={handleLogout} className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
                 Sign out ({auth.user.name})
               </button>

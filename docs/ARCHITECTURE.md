@@ -32,6 +32,7 @@ erDiagram
 | `admins` | Mayor / admin accounts, same shape as corporators minus the ward. |
 | `issues` | `title` is a one-line headline **generated from the description** (first ~80 characters, cut at a word boundary; `server/src/lib/title.js`) - the form doesn't collect one and any `title` a client sends is ignored. `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
 | `issue_updates` | Append-only history. `event` is `update` (status/remark/photos) or `transfer` (with `from_ward_id` / `to_ward_id`). `rejection_reason` is set when a corporator rejects (required by the API; NULL on older rows, whose explanation is in `remark`); proof photos use `photos`. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |
+| `admin_notes` | **Private** mayor/admin notes: `admin_id` (owner), optional `issue_id`, `body`, optional `budget_amount` (₹, `NUMERIC(14,2)`). Every query filters on the caller's `admin_id` (see `services/notes.js`), so a note is invisible to every other user. Deleting an issue keeps its notes (`issue_id` becomes NULL). |
 | `sessions` | Opaque bearer token → only its SHA-256 is stored. Expired rows are purged hourly. |
 | `photos` | Uploaded images (`name`, `content_type`, `data BYTEA`, ≤ 5 MB). `issues.photos` / `issue_updates.photos` hold `/uploads/<name>` URL paths that the API resolves against this table. Stored in the DB so they survive hosts with ephemeral disks. |
 
@@ -81,7 +82,13 @@ All JSON under `/api`. Errors always look like
 
 | Method & path | Response |
 | --- | --- |
-| `GET /api/admin/dashboard` | `{ totals, wards[], corporators[], overdue_days, generated_at }` - each block has `total, submitted, acknowledged, in_progress, resolved, rejected, open, overdue, avg_resolution_hours, resolution_rate` |
+| `GET /api/admin/dashboard` | `{ totals, wards[], corporators[], by_category[], my_notes, overdue_days, generated_at }` - each block has `total, submitted, acknowledged, in_progress, resolved, rejected, open, overdue, avg_resolution_hours, resolution_rate` (`by_category[]` = `{ category, total, open, resolved, rejected }`, feeding the pie chart) |
+| `GET /api/admin/issues` | City-wide list, same filters as the corporator inbox plus `ward=<number>`: `?status=open\|...\|all&category=&ward=&overdue=1&page=` → `{ issues[] (with constituency + corporator_name), total, counts }`. The pie chart's drill-down target |
+| `GET /api/admin/issues/:publicId` | The full record, read-only: everything corporators see plus `assigned_to`; `404` if unknown |
+| `GET /api/admin/notes[?issue=<publicId>]` | The caller's **own** notes (newest first) + `{ count, budget_total }` |
+| `POST /api/admin/notes` | JSON `{ body, budget_amount?, issue? }` → `201 { note }`. `budget_amount` accepts `125000`, `"1,25,000.50"`, `"₹ 40,000"`; empty/null = none |
+| `PUT /api/admin/notes/:id` | JSON `{ body, budget_amount? }` (empty budget clears it) → `{ note }`; `404` if it is not yours |
+| `DELETE /api/admin/notes/:id` | `204`; `404` if it is not yours |
 
 `GET /uploads/<uuid>.<ext>` serves a stored photo from the `photos` table (`Cache-Control: immutable`, `Cross-Origin-Resource-Policy: cross-origin` so a web app on another origin can display it). In production every other non-API `GET`
 falls back to the React app's `index.html`.
@@ -100,7 +107,10 @@ falls back to the React app's `index.html`.
 | `/corporator` | `CorporatorDashboard` (own numbers; every figure links to a filtered list) | corporator |
 | `/corporator/issues` | `CorporatorIssues` (status chips + category/overdue filter chips, from URL params; paged) | corporator |
 | `/corporator/issues/:id` | `CorporatorIssueDetail` (details, status buttons + rejection panel, transfer, history) | corporator |
-| `/admin` | `AdminDashboard` | admin |
+| `/admin` | `AdminDashboard` (stat cards, category pie chart, notes summary, constituency + corporator tables) | admin |
+| `/admin/issues` | `AdminIssues` (city-wide list; status/category/constituency/overdue filters from URL params) | admin |
+| `/admin/issues/:id` | `AdminIssueDetail` (the exact record, read-only, with private notes on it) | admin |
+| `/admin/notes` | `AdminNotes` (all my private notes, general or per issue) | admin |
 | `*` | `NotFound` | - |
 
 `ProtectedRoute` sends signed-out visitors to `/login` (and back afterwards), and signed-in users of the other role to their own home.
@@ -140,7 +150,10 @@ main.jsx
             │   │       ├─ TransferPanel (FormField, two-step confirm)
             │   │       └─ IssueTimeline (rejection reasons, transfer events)
             │   ├─ ProtectedRoute role="admin"
-            │   │   └─ AdminDashboard    (StatCard ×5, WardBar per ward, performance table)
+            │   │   ├─ AdminDashboard    (StatCard links, PieChart, notes summary card, WardBar per ward, performance table)
+            │   │   ├─ AdminIssues       (IssueListView scope="admin")
+            │   │   ├─ AdminIssueDetail  (IssueDetails, CitizenContact, NotesPanel, IssueTimeline)
+            │   │   └─ AdminNotes        (NotesPanel)
             │   └─ NotFound
             └─ Footer
 ```

@@ -11,6 +11,9 @@ import CorporatorDashboard from './pages/corporator/CorporatorDashboard.jsx';
 import CorporatorIssues from './pages/corporator/CorporatorIssues.jsx';
 import CorporatorIssueDetail from './pages/corporator/CorporatorIssueDetail.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
+import AdminIssueDetail from './pages/admin/AdminIssueDetail.jsx';
+import AdminIssues from './pages/admin/AdminIssues.jsx';
+import AdminNotes from './pages/admin/AdminNotes.jsx';
 
 export default function App() {
   return (
@@ -38,6 +41,9 @@ export default function App() {
         {/* Mayor / Admin */}
         <Route path="admin" element={<ProtectedRoute role="admin" />}>
           <Route index element={<AdminDashboard />} />
+          <Route path="issues" element={<AdminIssues />} />
+          <Route path="issues/:id" element={<AdminIssueDetail />} />
+          <Route path="notes" element={<AdminNotes />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

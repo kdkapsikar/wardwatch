@@ -10,7 +10,7 @@ mayor / admin gets a city-wide dashboard.
 | --- | --- |
 | **Citizen** (no login) | Report an issue with photos, a pin on the map (GPS or tap), constituency, name and phone → receive an Issue ID → look it up later and see the full update history |
 | **Corporator** (username + password) | Own dashboard with drill-down, see their constituency's issues, change status with one-tap buttons, reject with a mandatory reason (+ optional proof photos), add optional remarks and photos, transfer an issue to another constituency |
-| **Mayor / Admin** (username + password) | Constituency-wise issue counts, resolution statistics, corporator performance summary |
+| **Mayor / Admin** (username + password) | Constituency-wise issue counts, resolution statistics, corporator performance summary, a category pie chart that drills down to the exact record, and private budget notes |
 
 Deliberately **not** in V1: OTP, JWT, SMS/email, GIS analysis. The one external service is the free
 OpenStreetMap tile server used by the report form's map (see [Location picker](#location-picker)).
@@ -74,6 +74,22 @@ createdb wardwatch && createdb wardwatch_test
 - **Transfer** - an open issue can be moved to another constituency that has an active corporator. It leaves the
   sender's list, goes to that corporator as a new "Submitted" issue, and the history records who moved it, from where,
   to where, and an optional note. The sender can no longer open it.
+
+## Mayor / Admin portal
+
+- **Dashboard** (`/admin`) - city-wide numbers, an **issues-by-category pie chart**, the constituency table and
+  corporator performance. Click a pie slice (or a legend row) to see that category's issues
+  (`/admin/issues?category=roads`), then click any row to open the **exact record**: full details, the citizen's
+  contact and location, the assigned corporator and the whole update history (read-only). *Back* returns to the same
+  filtered list. The stat cards and each constituency also link into the list (`?status=open`, `?ward=7`).
+- **Private notes** (`/admin/notes`, and on every record) - notes with an optional **budget amount in ₹**, either
+  general or attached to one issue; add, edit and delete them. They are **private to the account that wrote
+  them**: every notes query is filtered by the signed-in admin's id on the server, so other admins, corporators and
+  the public cannot see, edit or delete them, and note text never appears in any issue payload. (Tests cover this with
+  a second admin account.) The dashboard shows your own note count and budget total.
+- The pie chart uses one fixed colour per category from a colour-blind-checked palette, with a legend table showing
+  every count and share (so nothing depends on colour or hover alone); with 7 categories it is at the upper limit of
+  what a pie communicates well, which is why the table is always shown next to it.
 
 ## Report form rules
 

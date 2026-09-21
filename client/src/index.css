@@ -37,3 +37,7 @@
     @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
   }
 }
+
+/* Pie-chart slices are SVG links; give keyboard focus a clear outline (and none for mouse clicks). */
+.pie-slice { outline: none; cursor: pointer; }
+.pie-slice:focus-visible path { stroke: #0b0b0b; stroke-width: 3px; }

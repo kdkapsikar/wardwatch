@@ -84,4 +84,19 @@ export const api = {
   postUpdate: (id, form) => request(`/corporator/issues/${encodeURIComponent(id)}/updates`, { method: 'POST', form }),
   // admin
   getDashboard: () => request('/admin/dashboard'),
+  getAdminIssues: ({ status, page, category, overdue, ward }) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (category) params.set('category', category);
+    if (ward) params.set('ward', String(ward));
+    if (overdue) params.set('overdue', '1');
+    if (page > 1) params.set('page', String(page));
+    return request(`/admin/issues?${params}`);
+  },
+  getAdminIssue: (id) => request(`/admin/issues/${encodeURIComponent(id)}`),
+  // private notes (each admin only ever sees their own)
+  listNotes: (issue) => request(`/admin/notes${issue ? `?issue=${encodeURIComponent(issue)}` : ''}`),
+  createNote: (body) => request('/admin/notes', { method: 'POST', json: body }),
+  updateNote: (id, body) => request(`/admin/notes/${id}`, { method: 'PUT', json: body }),
+  deleteNote: (id) => request(`/admin/notes/${id}`, { method: 'DELETE' }),
 };
