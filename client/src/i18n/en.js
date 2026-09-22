@@ -125,6 +125,7 @@ export default {
   "map.locating": "Finding your location...",
   "map.aria": "Map. Tap or click to place a marker at the issue location.",
   "map.markerAlt": "Issue location",
+  "map.viewAria": "Map. The location where the issue was reported is marked with a pin.",
   "map.latitude": "Latitude",
   "map.longitude": "Longitude",
   "map.clear": "Clear",
