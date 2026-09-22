@@ -5,6 +5,8 @@ import { useT } from '../../i18n/LanguageContext.jsx';
 import Alert from '../../components/ui/Alert.jsx';
 import Spinner from '../../components/ui/Spinner.jsx';
 import StatusBadge from '../../components/ui/StatusBadge.jsx';
+import CitizenIllustration from '../../components/illustrations/CitizenIllustration.jsx';
+import IllustrationPanel from '../../components/illustrations/IllustrationPanel.jsx';
 import { formatDate } from '../../lib/format.js';
 
 /** A citizen's own issues - basic details only, no filters or dashboard: just "what did I report, and where does it stand". */
@@ -19,9 +21,14 @@ export default function CitizenIssues() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{t('citizen.list.title')}</h1>
-        <p className="mt-1 text-sm text-slate-600">{t('citizen.list.subtitle')}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{t('citizen.list.title')}</h1>
+          <p className="mt-1 text-sm text-slate-600">{t('citizen.list.subtitle')}</p>
+        </div>
+        <IllustrationPanel>
+          <CitizenIllustration className="aspect-[240/190] h-24" />
+        </IllustrationPanel>
       </div>
 
       <Alert>{error}</Alert>

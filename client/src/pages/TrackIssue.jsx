@@ -6,6 +6,8 @@ import Alert from '../components/ui/Alert.jsx';
 import IssueDetails from '../components/IssueDetails.jsx';
 import IssueTimeline from '../components/IssueTimeline.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
+import CitizenIllustration from '../components/illustrations/CitizenIllustration.jsx';
+import IllustrationPanel from '../components/illustrations/IllustrationPanel.jsx';
 
 export default function TrackIssue() {
   const { id } = useParams();
@@ -36,9 +38,16 @@ export default function TrackIssue() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{t('track.title')}</h1>
-        <p className="mt-1 text-sm text-slate-600">{t('track.lead')}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{t('track.title')}</h1>
+          <p className="mt-1 text-sm text-slate-600">{t('track.lead')}</p>
+        </div>
+        {state.status === 'idle' && (
+          <IllustrationPanel>
+            <CitizenIllustration className="aspect-[240/190] h-24" />
+          </IllustrationPanel>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-2" role="search">

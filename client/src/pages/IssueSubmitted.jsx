@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useT } from '../i18n/LanguageContext.jsx';
+import CitizenIllustration from '../components/illustrations/CitizenIllustration.jsx';
 
 export default function IssueSubmitted() {
   const { id } = useParams();
@@ -19,6 +20,9 @@ export default function IssueSubmitted() {
 
   return (
     <div className="mx-auto max-w-lg text-center">
+      <div className="mx-auto mb-6 max-w-xs rounded-2xl bg-brand-50 p-4">
+        <CitizenIllustration className="h-auto w-full" />
+      </div>
       <div className="card p-8">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700" aria-hidden="true">✓</div>
         <h1 className="mt-4 text-2xl font-bold">{t('submitted.title')}</h1>

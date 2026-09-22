@@ -6,6 +6,7 @@ import { useT } from '../../i18n/LanguageContext.jsx';
 import { homeFor } from '../../lib/routes.js';
 import Alert from '../../components/ui/Alert.jsx';
 import FormField from '../../components/ui/FormField.jsx';
+import CitizenIllustration from '../../components/illustrations/CitizenIllustration.jsx';
 
 /**
  * Citizen sign-in: phone number, then a 4-digit code, no password. A citizen's identity IS their
@@ -53,6 +54,9 @@ export default function CitizenLogin() {
 
   return (
     <div className="mx-auto max-w-sm">
+      <div className="mx-auto mb-5 max-w-[220px] rounded-xl bg-brand-50 p-3">
+        <CitizenIllustration className="h-auto w-full" />
+      </div>
       <div className="card p-6">
         <h1 className="text-xl font-semibold">{t('citizen.login.title')}</h1>
         <p className="mt-1 text-sm text-slate-600">{t('citizen.login.subtitle')}</p>

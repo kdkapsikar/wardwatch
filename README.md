@@ -149,10 +149,19 @@ language instantly; the choice is remembered in the browser, and a browser set t
   GitHub Pages) - add the same two origins there if you swap the font.
 - **Illustrations** (`client/src/components/illustrations/`) - one small original SVG scene per audience, all
   hand-drawn from basic shapes (no stock art, no photos, so there is nothing to license or attribute): a citizen
-  reporting a pothole (`CitizenIllustration`, on the Home page), a corporator reviewing their ward on a tablet
-  (`CorporatorIllustration`, on `/corporator`), and a mayor's-eye view of the city (`AdminIllustration`, on
-  `/admin`). They use the same theme tokens as everything else (`fill-brand-600`, `fill-amber-500`, `fill-slate-900`),
-  so a future theme change re-colors them for free.
+  reporting a pothole (`CitizenIllustration`), a corporator reviewing their ward on a tablet
+  (`CorporatorIllustration`), and a mayor's-eye view of the city (`AdminIllustration`). They use the same theme
+  tokens as everything else (`fill-brand-600`, `fill-amber-500`, `fill-slate-900`), so a future theme change
+  re-colors them for free.
+  - **Citizen pages** (full-size hero): Home, and the "issue submitted" confirmation page.
+  - **Citizen pages** (small, `IllustrationPanel`, beside the title): Report an issue, Track an issue (only
+    before a result is shown - it steps aside once a record is on screen), the citizen portal's sign-in page
+    and its issue list.
+  - **Corporator pages** (small): the corporator dashboard and issue list.
+  - **Admin pages** (small): the admin dashboard, issue list and private notes.
+  - **Left alone on purpose:** every record/detail view (`.../issues/:id`, on any role) - these are data-dense,
+    and a decoration would just compete with the content - and the shared staff sign-in page (`/login`), since
+    it serves both corporators and admins and no single persona fits it.
 
 ## Report form rules
 

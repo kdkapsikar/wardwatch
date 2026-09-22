@@ -7,6 +7,8 @@ import CheckboxField from '../components/ui/CheckboxField.jsx';
 import FormField from '../components/ui/FormField.jsx';
 import PhotoUploader from '../components/PhotoUploader.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
+import CitizenIllustration from '../components/illustrations/CitizenIllustration.jsx';
+import IllustrationPanel from '../components/illustrations/IllustrationPanel.jsx';
 import { CATEGORIES } from '../lib/constants.js';
 import { validateReport } from '../lib/validation.js';
 
@@ -99,11 +101,18 @@ export default function ReportIssue() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-2xl font-bold">{t('report.title')}</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        {t('report.intro')}{' '}
-        {t('report.required').split('*').flatMap((part, i) => (i === 0 ? [part] : [<span key={i} className="text-red-600">*</span>, part]))}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{t('report.title')}</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            {t('report.intro')}{' '}
+            {t('report.required').split('*').flatMap((part, i) => (i === 0 ? [part] : [<span key={i} className="text-red-600">*</span>, part]))}
+          </p>
+        </div>
+        <IllustrationPanel>
+          <CitizenIllustration className="aspect-[240/190] h-24" />
+        </IllustrationPanel>
+      </div>
 
       <form ref={formRef} onSubmit={handleSubmit} className="card mt-6 space-y-5 p-5 sm:p-6" noValidate>
         <Alert>{formError}</Alert>
