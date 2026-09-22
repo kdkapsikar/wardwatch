@@ -147,21 +147,22 @@ language instantly; the choice is remembered in the browser, and a browser set t
   a mismatched system font. Loading it needs `style-src`/`font-src` entries for `fonts.googleapis.com` /
   `fonts.gstatic.com` in both CSPs (`server/src/app.js` and `client/vite.config.js`'s build-time `<meta>` CSP for
   GitHub Pages) - add the same two origins there if you swap the font.
-- **Illustrations** (`client/src/components/illustrations/`) - one small original SVG scene per audience, all
-  hand-drawn from basic shapes (no stock art, no photos, so there is nothing to license or attribute): a citizen
-  reporting a pothole (`CitizenIllustration`), a corporator reviewing their ward on a tablet
-  (`CorporatorIllustration`), and a mayor's-eye view of the city (`AdminIllustration`). They use the same theme
-  tokens as everything else (`fill-brand-600`, `fill-amber-500`, `fill-slate-900`), so a future theme change
-  re-colors them for free.
-  - **Citizen pages** (full-size hero): Home, and the "issue submitted" confirmation page.
-  - **Citizen pages** (small, `IllustrationPanel`, beside the title): Report an issue, Track an issue (only
-    before a result is shown - it steps aside once a record is on screen), the citizen portal's sign-in page
-    and its issue list.
-  - **Corporator pages** (small): the corporator dashboard and issue list.
-  - **Admin pages** (small): the admin dashboard, issue list and private notes.
-  - **Left alone on purpose:** every record/detail view (`.../issues/:id`, on any role) - these are data-dense,
-    and a decoration would just compete with the content - and the shared staff sign-in page (`/login`), since
-    it serves both corporators and admins and no single persona fits it.
+- **Hero illustration** (`client/src/components/illustrations/CitizenIllustration.jsx`) - one original, hand-drawn
+  SVG scene (no stock art, no photos, so there is nothing to license or attribute) of a citizen reporting a
+  pothole. Used full-size in exactly two places: the Home page and the "issue submitted" confirmation page - the
+  two moments the site is actively inviting or thanking a citizen. It was tried as a small boxed illustration on
+  every other page too; that read as clutter rather than identity, so it was pulled back to just these two spots.
+- **Everywhere else:** a quiet background instead of a picture, so blank space (a sparse form, an empty list, the
+  sign-in page) never looks unfinished, without competing with real content:
+  - `.bg-dot-grid` (`client/src/index.css`) - a small repeating dot pattern (brand-600 at 7% opacity, 22px
+    spacing), applied once on `Layout.jsx`'s root element so every page gets it automatically. It tiles to any
+    size, so it needs no per-breakpoint handling.
+  - `BrandWatermark.jsx` - a large, very faint (5% opacity) version of the app's own shield mark, fixed to the
+    bottom-right corner of the viewport, behind everything (`-z-10`) and non-interactive (`pointer-events-none`),
+    so it never affects layout, scroll or clicks. Hidden below the `sm` breakpoint (a phone has little spare
+    corner space to spend on it) and sized up at `md`/`lg` on larger screens.
+  - Any card or panel's own opaque background (`bg-white`) simply paints over both wherever there is real
+    content, so the effect only shows in genuinely blank areas.
 
 ## Report form rules
 

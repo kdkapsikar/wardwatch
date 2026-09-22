@@ -1,12 +1,14 @@
 import { Outlet } from 'react-router-dom';
 import { useT } from '../../i18n/LanguageContext.jsx';
+import BrandWatermark from '../illustrations/BrandWatermark.jsx';
 import Footer from './Footer.jsx';
 import Header from './Header.jsx';
 
 export default function Layout() {
   const { t } = useT();
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-dot-grid">
+      <BrandWatermark />
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:rounded focus:bg-white focus:px-3 focus:py-2">
         {t('a11y.skip')}
       </a>

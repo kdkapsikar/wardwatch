@@ -5,7 +5,6 @@ import { useT } from '../i18n/LanguageContext.jsx';
 import Alert from './ui/Alert.jsx';
 import Spinner from './ui/Spinner.jsx';
 import StatusBadge from './ui/StatusBadge.jsx';
-import IllustrationPanel from './illustrations/IllustrationPanel.jsx';
 import { CATEGORIES } from '../lib/constants.js';
 import { formatDate } from '../lib/format.js';
 
@@ -28,7 +27,7 @@ const CHIPS = [
  * Filterable, paged issue list shared by the corporator inbox (scope "corporator") and the
  * mayor/admin city-wide list (scope "admin", which also shows constituency + corporator per row).
  */
-export default function IssueListView({ scope, title, subtitle, illustration }) {
+export default function IssueListView({ scope, title, subtitle }) {
   const admin = scope === 'admin';
   const { t, categoryLabel, personName } = useT();
   const base = admin ? '/admin/issues' : '/corporator/issues';
@@ -65,12 +64,9 @@ export default function IssueListView({ scope, title, subtitle, illustration }) 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{title}</h1>
-          {subtitle && <p className="mt-1 text-sm text-slate-600">{subtitle}</p>}
-        </div>
-        {illustration && <IllustrationPanel>{illustration}</IllustrationPanel>}
+      <div>
+        <h1 className="text-2xl font-bold">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-slate-600">{subtitle}</p>}
       </div>
 
       <Alert tone="success">{location.state?.flash}</Alert>

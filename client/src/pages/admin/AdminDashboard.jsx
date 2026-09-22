@@ -8,8 +8,6 @@ import PieChart from '../../components/PieChart.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
 import { CATEGORY_CHART, STATUS, STATUS_ORDER } from '../../lib/constants.js';
 import { formatDateTime, formatHours, formatPercent, formatRupees } from '../../lib/format.js';
-import AdminIllustration from '../../components/illustrations/AdminIllustration.jsx';
-import IllustrationPanel from '../../components/illustrations/IllustrationPanel.jsx';
 
 /** Stacked bar of a constituency's issues by status, scaled against the busiest one. */
 function WardBar({ ward, max }) {
@@ -54,14 +52,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t('admin.dash.title')}</h1>
-          <p className="mt-1 text-xs text-slate-500">{t('admin.dash.asOf', { when: formatDateTime(data.generated_at) })}</p>
-        </div>
-        <IllustrationPanel>
-          <AdminIllustration className="aspect-[240/190] h-24" />
-        </IllustrationPanel>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <h1 className="text-2xl font-bold">{t('admin.dash.title')}</h1>
+        <p className="text-xs text-slate-500">{t('admin.dash.asOf', { when: formatDateTime(data.generated_at) })}</p>
       </div>
 
       <section aria-label={t('dash.summary')} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
