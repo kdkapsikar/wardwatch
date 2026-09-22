@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { useT } from '../../i18n/LanguageContext.jsx';
 import Alert from '../../components/ui/Alert.jsx';
 import Spinner from '../../components/ui/Spinner.jsx';
@@ -9,6 +10,7 @@ import { formatDate } from '../../lib/format.js';
 
 /** A citizen's own issues - basic details only, no filters or dashboard: just "what did I report, and where does it stand". */
 export default function CitizenIssues() {
+  const { auth } = useAuth();
   const { t, categoryLabel, wardName } = useT();
   const [issues, setIssues] = useState(null);
   const [error, setError] = useState('');
@@ -20,6 +22,7 @@ export default function CitizenIssues() {
   return (
     <div className="space-y-6">
       <div>
+        <p className="text-sm font-medium text-brand-700">{t('dash.welcome', { name: auth.user.phone })}</p>
         <h1 className="text-2xl font-bold">{t('citizen.list.title')}</h1>
         <p className="mt-1 text-sm text-slate-600">{t('citizen.list.subtitle')}</p>
       </div>

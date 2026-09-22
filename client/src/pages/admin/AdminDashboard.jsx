@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { useT } from '../../i18n/LanguageContext.jsx';
 import Alert from '../../components/ui/Alert.jsx';
 import Spinner from '../../components/ui/Spinner.jsx';
@@ -27,6 +28,7 @@ const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide te
 const td = 'px-3 py-2.5 text-sm tabular-nums';
 
 export default function AdminDashboard() {
+  const { auth } = useAuth();
   const { t, statusLabel, categoryLabel, wardName, personName } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -53,7 +55,10 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h1 className="text-2xl font-bold">{t('admin.dash.title')}</h1>
+        <div>
+          <p className="text-sm font-medium text-brand-700">{t('dash.welcome', { name: personName(auth.user.name) })}</p>
+          <h1 className="text-2xl font-bold">{t('admin.dash.title')}</h1>
+        </div>
         <p className="text-xs text-slate-500">{t('admin.dash.asOf', { when: formatDateTime(data.generated_at) })}</p>
       </div>
 

@@ -84,14 +84,14 @@ describe('dictionaries', () => {
 describe('translate()', () => {
   test('interpolation, plurals and English fallback', () => {
     i18n.setLang('mr');
-    assert.equal(i18n.translate('nav.signOut', { name: 'Asha' }), 'बाहेर पडा (Asha)');
+    assert.equal(i18n.translate('dash.welcome', { name: 'Asha' }), 'स्वागत आहे, Asha!');
     assert.equal(i18n.translate('admin.notes.count', { n: 1, count: 1 }), '1 टीप');
     assert.equal(i18n.translate('admin.notes.count', { n: 5, count: 5 }), '5 टिपा');
     i18n.setLang('en');
     assert.equal(i18n.translate('admin.notes.count', { n: 1, count: 1 }), '1 note');
     assert.equal(i18n.translate('admin.notes.count', { n: 3, count: 3 }), '3 notes');
     assert.equal(i18n.translate('no.such.key'), 'no.such.key');
-    assert.equal(i18n.translate('nav.signOut'), 'Sign out ({name})'); // missing param left visible, never "undefined"
+    assert.equal(i18n.translate('dash.welcome'), 'Welcome, {name}!'); // missing param left visible, never "undefined"
   });
 });
 

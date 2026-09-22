@@ -49,7 +49,7 @@ const cellLink = 'font-medium text-brand-700 hover:underline';
 
 export default function CorporatorDashboard() {
   const { auth } = useAuth();
-  const { t, categoryLabel, wardName } = useT();
+  const { t, categoryLabel, wardName, personName } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -66,6 +66,7 @@ export default function CorporatorDashboard() {
   return (
     <div className="space-y-8">
       <div>
+        <p className="text-sm font-medium text-brand-700">{t('dash.welcome', { name: personName(auth.user.name) })}</p>
         <h1 className="text-2xl font-bold">{t('dash.corp.title')}</h1>
         <p className="mt-1 text-sm text-slate-600">{t('detail.constituencyValue', { n: ward.number, name: wardName(ward) })}</p>
       </div>
