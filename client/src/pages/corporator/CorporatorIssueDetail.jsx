@@ -254,14 +254,14 @@ export default function CorporatorIssueDetail() {
     setError('');
     api.getAssigned(id)
       .then((d) => !cancelled && setIssue(d.issue))
-      .catch((e) => !cancelled && setError(e.message));
+      .catch((e) => !cancelled && setError(e.status === 404 ? 'not_found' : e.message));
     return () => { cancelled = true; };
   }, [id]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Link to="/corporator/issues" className="text-sm text-brand-700 hover:underline">{t('detail.back')}</Link>
-      <Alert>{error}</Alert>
+      <Alert>{error === 'not_found' ? t('detail.notAssigned', { id }) : error}</Alert>
       {!issue && !error && <Spinner />}
       {issue && (
         <>

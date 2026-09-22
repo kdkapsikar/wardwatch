@@ -2,6 +2,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useT } from '../../i18n/LanguageContext.jsx';
 import { publicUrl } from '../../lib/config.js';
+import IssueIdSearch from '../IssueIdSearch.jsx';
 import LanguageToggle from '../LanguageToggle.jsx';
 
 const navClass = ({ isActive }) =>
@@ -35,6 +36,7 @@ export default function Header() {
               {auth.role === 'corporator' && <NavLink to="/corporator/issues" className={navClass}>{t('nav.issues')}</NavLink>}
               {auth.role === 'admin' && <NavLink to="/admin/issues" className={navClass}>{t('nav.issues')}</NavLink>}
               {auth.role === 'admin' && <NavLink to="/admin/notes" className={navClass}>{t('nav.notes')}</NavLink>}
+              <IssueIdSearch role={auth.role} />
               <button type="button" onClick={handleLogout} className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
                 {t('nav.signOut', { name: personName(auth.user.name) })}
               </button>
