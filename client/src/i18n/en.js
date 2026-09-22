@@ -12,7 +12,7 @@ export default {
   "nav.issues": "Issues",
   "nav.notes": "My notes",
   "nav.signOut": "Sign out ({name})",
-  "nav.staffSignIn": "Staff sign in",
+  "nav.signIn": "Sign in",
   "common.loading": "Loading...",
   "common.optional": "(optional)",
   "common.current": "current",

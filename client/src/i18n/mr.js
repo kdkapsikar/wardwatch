@@ -14,7 +14,7 @@ export default {
   "nav.issues": "तक्रारी",
   "nav.notes": "माझ्या टिपा",
   "nav.signOut": "बाहेर पडा ({name})",
-  "nav.staffSignIn": "कर्मचारी लॉगिन",
+  "nav.signIn": "लॉगिन",
   "common.loading": "लोड होत आहे...",
   "common.optional": "(ऐच्छिक)",
   "common.current": "सध्याची",

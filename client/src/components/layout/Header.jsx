@@ -29,8 +29,6 @@ export default function Header() {
           <LanguageToggle />
         </div>
         <nav className="flex w-full flex-wrap items-center gap-1 sm:ml-auto sm:w-auto" aria-label={t('nav.main')}>
-          <NavLink to="/report" className={navClass}>{t('nav.report')}</NavLink>
-          <NavLink to="/track" className={navClass}>{t('nav.track')}</NavLink>
           {auth ? (
             <>
               <NavLink to={auth.role === 'admin' ? '/admin' : '/corporator'} end className={navClass}>{t('nav.dashboard')}</NavLink>
@@ -42,7 +40,11 @@ export default function Header() {
               </button>
             </>
           ) : (
-            <NavLink to="/login" className={navClass}>{t('nav.staffSignIn')}</NavLink>
+            <>
+              <NavLink to="/report" className={navClass}>{t('nav.report')}</NavLink>
+              <NavLink to="/track" className={navClass}>{t('nav.track')}</NavLink>
+              <NavLink to="/login" className={navClass}>{t('nav.signIn')}</NavLink>
+            </>
           )}
         </nav>
       </div>
