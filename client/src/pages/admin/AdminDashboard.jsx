@@ -7,18 +7,24 @@ import Alert from '../../components/ui/Alert.jsx';
 import Spinner from '../../components/ui/Spinner.jsx';
 import PieChart from '../../components/PieChart.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
-import { CATEGORY_CHART, STATUS, STATUS_ORDER } from '../../lib/constants.js';
+import { CATEGORY_CHART, CORPORATOR_STATUSES, STATUS } from '../../lib/constants.js';
 import { formatDateTime, formatHours, formatPercent, formatRupees } from '../../lib/format.js';
 
-/** Stacked bar of a constituency's issues by status, scaled against the busiest one. */
+/**
+ * Stacked bar of a constituency's issues by status, scaled against the busiest one. Only the four
+ * statuses a corporator can set are broken out (not "Submitted", a system state nobody chooses) so
+ * this matches the same four everywhere else on the dashboard; the bar's own width still reflects
+ * the ward's true total, so a ward with many fresh, unactioned issues still reads as busy.
+ */
 function WardBar({ ward, max }) {
   const { t, statusLabel } = useT();
   if (ward.total === 0) return <span className="text-xs text-slate-400">{t('admin.dash.noIssuesShort')}</span>;
-  const label = STATUS_ORDER.map((s) => `${ward[s]} ${statusLabel(s)}`).join(', ');
+  const actioned = CORPORATOR_STATUSES.reduce((n, s) => n + ward[s], 0);
+  const label = CORPORATOR_STATUSES.map((s) => `${ward[s]} ${statusLabel(s)}`).join(', ');
   return (
     <div className="flex h-3 overflow-hidden rounded-full bg-slate-100" style={{ width: `${(ward.total / max) * 100}%`, minWidth: '0.75rem' }} role="img" aria-label={label} title={label}>
-      {STATUS_ORDER.map((s) => (
-        ward[s] > 0 && <div key={s} className={STATUS[s].bar} style={{ width: `${(ward[s] / ward.total) * 100}%` }} />
+      {actioned > 0 && CORPORATOR_STATUSES.map((s) => (
+        ward[s] > 0 && <div key={s} className={STATUS[s].bar} style={{ width: `${(ward[s] / actioned) * 100}%` }} />
       ))}
     </div>
   );
@@ -101,7 +107,7 @@ export default function AdminDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <h2 id="wards" className="font-semibold">{t('admin.dash.byWard')}</h2>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label={t('admin.dash.legend')}>
-            {STATUS_ORDER.map((s) => (
+            {CORPORATOR_STATUSES.map((s) => (
               <li key={s} className="flex items-center gap-1.5"><span className={`h-2.5 w-2.5 rounded-sm ${STATUS[s].bar}`} />{statusLabel(s)}</li>
             ))}
           </ul>

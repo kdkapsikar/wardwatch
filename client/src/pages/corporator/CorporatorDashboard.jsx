@@ -7,30 +7,36 @@ import { useT } from '../../i18n/LanguageContext.jsx';
 import Spinner from '../../components/ui/Spinner.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
 import StatusBadge from '../../components/ui/StatusBadge.jsx';
-import { STATUS, STATUS_ORDER } from '../../lib/constants.js';
+import { CORPORATOR_STATUSES, STATUS } from '../../lib/constants.js';
 import { formatHours, formatPercent } from '../../lib/format.js';
 
 const issues = (params) => `/corporator/issues?${new URLSearchParams(params)}`;
 
-/** Where the corporator's issues stand; every segment is a link into the filtered list. */
+/**
+ * Where the corporator's issues stand; every segment is a link into the filtered list.
+ * Deliberately shows only the four statuses a corporator can actually set (not "Submitted" -
+ * that's a system state before anyone has acted, not one of their options), so the breakdown
+ * matches the buttons on the update form instead of introducing a fifth category nobody chooses.
+ */
 function StatusBar({ totals }) {
   const { t, statusLabel } = useT();
+  const actioned = CORPORATOR_STATUSES.reduce((n, s) => n + totals[s], 0);
   return (
     <div>
       <div className="flex h-4 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={t('dash.statusAria')}>
-        {STATUS_ORDER.filter((s) => totals[s] > 0).map((s) => (
+        {actioned > 0 && CORPORATOR_STATUSES.filter((s) => totals[s] > 0).map((s) => (
           <Link
             key={s}
             to={issues({ status: s })}
             title={`${statusLabel(s)}: ${totals[s]}`}
             aria-label={t('dash.viewThese', { label: statusLabel(s), n: totals[s] })}
             className={`${STATUS[s].bar} transition hover:opacity-75`}
-            style={{ width: `${(totals[s] / totals.total) * 100}%` }}
+            style={{ width: `${(totals[s] / actioned) * 100}%` }}
           />
         ))}
       </div>
       <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
-        {STATUS_ORDER.map((s) => (
+        {CORPORATOR_STATUSES.map((s) => (
           <li key={s}>
             <Link to={issues({ status: s })} className="flex items-center gap-1.5 text-slate-700 hover:text-brand-700 hover:underline">
               <span className={`h-2.5 w-2.5 rounded-sm ${STATUS[s].bar}`} />

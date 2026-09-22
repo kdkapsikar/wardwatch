@@ -9,9 +9,9 @@ export const STATUS = {
   rejected:     { badge: 'bg-rose-50 text-rose-800 ring-rose-200',       bar: 'bg-rose-400',    dot: 'bg-rose-400', solid: 'bg-rose-600 text-white border-rose-600' },
 };
 
-export const STATUS_ORDER = ['submitted', 'acknowledged', 'in_progress', 'resolved', 'rejected'];
-
-// Statuses a corporator can move an issue to.
+// Statuses a corporator can move an issue to. Dashboards deliberately break status counts down by
+// just these four (not "Submitted", a system state before anyone has acted, not a corporator
+// option) - see StatusBar in CorporatorDashboard.jsx and WardBar in AdminDashboard.jsx.
 export const CORPORATOR_STATUSES = ['acknowledged', 'in_progress', 'resolved', 'rejected'];
 
 export const CATEGORIES = [
