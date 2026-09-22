@@ -55,7 +55,7 @@ const cellLink = 'font-medium text-brand-700 hover:underline';
 
 export default function CorporatorDashboard() {
   const { auth } = useAuth();
-  const { t, categoryLabel, wardName, personName } = useT();
+  const { t, statusLabel, categoryLabel, wardName, personName } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -83,9 +83,17 @@ export default function CorporatorDashboard() {
         </div>
       ) : (
         <>
+          {/* Total, then the exact four statuses a corporator can set - same set, same order, same
+              labels as the "Where things stand" bar below and the update form's status buttons. */}
           <section aria-label={t('dash.summary')} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <StatCard label={t('dash.assigned')} value={totals.total} to={issues({ status: 'all' })} />
-            <StatCard label={t('dash.open')} value={totals.open} to={issues({ status: 'open' })} hint={t('dash.notAck', { n: totals.submitted })} />
+            <StatCard label={statusLabel('acknowledged')} value={totals.acknowledged} to={issues({ status: 'acknowledged' })} tone="text-sky-700" hint={t('dash.notAck', { n: totals.submitted })} />
+            <StatCard label={statusLabel('in_progress')} value={totals.in_progress} to={issues({ status: 'in_progress' })} tone="text-amber-600" />
+            <StatCard label={t('dash.resolved')} value={totals.resolved} to={issues({ status: 'resolved' })} tone="text-emerald-700" />
+            <StatCard label={t('dash.rejected')} value={totals.rejected} to={issues({ status: 'rejected' })} tone="text-rose-700" />
+          </section>
+
+          <section aria-label={t('dash.performance')} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <StatCard
               label={t('dash.overdue')}
               value={totals.overdue}
@@ -93,11 +101,6 @@ export default function CorporatorDashboard() {
               hint={t('dash.overdueHint', { days: data.overdue_days })}
               tone={totals.overdue ? 'text-amber-700' : undefined}
             />
-            <StatCard label={t('dash.resolved')} value={totals.resolved} to={issues({ status: 'resolved' })} tone="text-emerald-700" />
-            <StatCard label={t('dash.rejected')} value={totals.rejected} to={issues({ status: 'rejected' })} />
-          </section>
-
-          <section aria-label={t('dash.performance')} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard label={t('dash.resolutionRate')} value={formatPercent(totals.resolution_rate)} hint={t('dash.resolutionRateHint')} />
             <StatCard label={t('dash.avgTime')} value={formatHours(totals.avg_resolution_hours)} />
             <StatCard label={t('dash.received30')} value={totals.received_30d} />

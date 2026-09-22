@@ -68,10 +68,24 @@ export default function AdminDashboard() {
         <p className="text-xs text-slate-500">{t('admin.dash.asOf', { when: formatDateTime(data.generated_at) })}</p>
       </div>
 
+      {/* Total, then the exact four statuses a corporator can set - same set, same order, same
+          labels as the by-constituency bars below and the corporator's own dashboard. */}
       <section aria-label={t('dash.summary')} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatCard label={t('admin.dash.total')} value={totals.total} to="/admin/issues?status=all" hint={totals.unassigned ? t('admin.dash.unassigned', { n: totals.unassigned }) : undefined} />
-        <StatCard label={t('dash.open')} value={totals.open} to="/admin/issues?status=open" hint={t('admin.dash.overdueHint', { n: totals.overdue, days: data.overdue_days })} tone={totals.overdue ? 'text-amber-700' : undefined} />
-        <StatCard label={t('dash.resolved')} value={totals.resolved} to="/admin/issues?status=resolved" tone="text-emerald-700" hint={t('admin.dash.rejectedHint', { n: totals.rejected })} />
+        <StatCard label={statusLabel('acknowledged')} value={totals.acknowledged} to="/admin/issues?status=acknowledged" tone="text-sky-700" />
+        <StatCard label={statusLabel('in_progress')} value={totals.in_progress} to="/admin/issues?status=in_progress" tone="text-amber-600" />
+        <StatCard label={t('dash.resolved')} value={totals.resolved} to="/admin/issues?status=resolved" tone="text-emerald-700" />
+        <StatCard label={t('dash.rejected')} value={totals.rejected} to="/admin/issues?status=rejected" tone="text-rose-700" />
+      </section>
+
+      <section aria-label={t('dash.performance')} className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <StatCard
+          label={t('dash.overdue')}
+          value={totals.overdue}
+          to="/admin/issues?status=open&overdue=1"
+          hint={t('dash.overdueHint', { days: data.overdue_days })}
+          tone={totals.overdue ? 'text-amber-700' : undefined}
+        />
         <StatCard label={t('dash.resolutionRate')} value={formatPercent(totals.resolution_rate)} hint={t('admin.dash.resolutionHint')} />
         <StatCard label={t('dash.avgTime')} value={formatHours(totals.avg_resolution_hours)} />
       </section>
