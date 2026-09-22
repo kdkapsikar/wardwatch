@@ -32,19 +32,23 @@ export default function Header() {
         <nav className="flex w-full flex-wrap items-center gap-1 sm:ml-auto sm:w-auto" aria-label={t('nav.main')}>
           {auth ? (
             <>
-              <NavLink to={auth.role === 'admin' ? '/admin' : '/corporator'} end className={navClass}>{t('nav.dashboard')}</NavLink>
+              {auth.role === 'citizen' && <NavLink to="/my" end className={navClass}>{t('nav.myIssues')}</NavLink>}
+              {auth.role !== 'citizen' && (
+                <NavLink to={auth.role === 'admin' ? '/admin' : '/corporator'} end className={navClass}>{t('nav.dashboard')}</NavLink>
+              )}
               {auth.role === 'corporator' && <NavLink to="/corporator/issues" className={navClass}>{t('nav.issues')}</NavLink>}
               {auth.role === 'admin' && <NavLink to="/admin/issues" className={navClass}>{t('nav.issues')}</NavLink>}
               {auth.role === 'admin' && <NavLink to="/admin/notes" className={navClass}>{t('nav.notes')}</NavLink>}
-              <IssueIdSearch role={auth.role} />
+              {(auth.role === 'corporator' || auth.role === 'admin') && <IssueIdSearch role={auth.role} />}
               <button type="button" onClick={handleLogout} className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-                {t('nav.signOut', { name: personName(auth.user.name) })}
+                {t('nav.signOut', { name: auth.role === 'citizen' ? auth.user.phone : personName(auth.user.name) })}
               </button>
             </>
           ) : (
             <>
               <NavLink to="/report" className={navClass}>{t('nav.report')}</NavLink>
               <NavLink to="/track" className={navClass}>{t('nav.track')}</NavLink>
+              <NavLink to="/my/login" className={navClass}>{t('nav.myIssues')}</NavLink>
               <NavLink to="/login" className={navClass}>{t('nav.signIn')}</NavLink>
             </>
           )}

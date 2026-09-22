@@ -70,6 +70,15 @@ export const api = {
       tokenStore.clear();
     }
   },
+  // citizen (OTP sign-in)
+  requestOtp: (phone) => request('/citizen/otp/request', { method: 'POST', json: { phone } }),
+  verifyOtp: async (phone, code) => {
+    const data = await request('/citizen/otp/verify', { method: 'POST', json: { phone, code } });
+    tokenStore.set(data.token);
+    return data;
+  },
+  listMyIssues: () => request('/citizen/issues'),
+  getMyIssue: (id) => request(`/citizen/issues/${encodeURIComponent(id)}`),
   // corporator
   getCorporatorDashboard: () => request('/corporator/dashboard'),
   listAssigned: ({ status, page, category, overdue }) => {

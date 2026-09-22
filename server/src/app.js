@@ -13,6 +13,7 @@ import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
 import corporatorRoutes from './routes/corporator.js';
 import adminRoutes from './routes/admin.js';
+import citizenRoutes from './routes/citizen.js';
 
 export function createApp() {
   const app = express();
@@ -63,6 +64,7 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/corporator', corporatorRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/citizen', citizenRoutes);
   app.use('/api', notFound);
 
   // Production: serve the built React app and fall back to index.html for client-side routes.

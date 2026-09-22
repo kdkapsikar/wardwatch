@@ -14,6 +14,9 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import AdminIssueDetail from './pages/admin/AdminIssueDetail.jsx';
 import AdminIssues from './pages/admin/AdminIssues.jsx';
 import AdminNotes from './pages/admin/AdminNotes.jsx';
+import CitizenLogin from './pages/citizen/CitizenLogin.jsx';
+import CitizenIssues from './pages/citizen/CitizenIssues.jsx';
+import CitizenIssueDetail from './pages/citizen/CitizenIssueDetail.jsx';
 
 export default function App() {
   return (
@@ -30,6 +33,13 @@ export default function App() {
         <Route path="login" element={<Login />} />
         <Route path="corporator/login" element={<Navigate to="/login" replace />} />
         <Route path="admin/login" element={<Navigate to="/login" replace />} />
+
+        {/* Citizen portal: phone + OTP sign-in, to see every issue reported with that number. */}
+        <Route path="my/login" element={<CitizenLogin />} />
+        <Route path="my" element={<ProtectedRoute role="citizen" />}>
+          <Route index element={<CitizenIssues />} />
+          <Route path="issues/:id" element={<CitizenIssueDetail />} />
+        </Route>
 
         {/* Corporator */}
         <Route path="corporator" element={<ProtectedRoute role="corporator" />}>

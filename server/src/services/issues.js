@@ -59,14 +59,19 @@ export async function createIssue({
  *  - public view (default): no citizen contact details.
  *  - `corporatorId`: restricts to that corporator's issues and includes contact details + coordinates.
  *  - `staff: true` (mayor/admin): any issue, with the same private fields plus the assigned corporator.
- * Returns null if not found (or not visible to that corporator).
+ *  - `citizenPhone`: restricts to issues filed with that phone number; adds who it is assigned to
+ *    (but not the contact/location fields, which would just echo back what the citizen already knows).
+ * Returns null if not found (or not visible to that corporator / phone number).
  */
-export async function getIssue(publicId, { corporatorId, staff = false } = {}) {
+export async function getIssue(publicId, { corporatorId, staff = false, citizenPhone } = {}) {
   const params = [publicId];
   let scope = '';
   if (corporatorId !== undefined) {
     params.push(corporatorId);
     scope = 'AND i.corporator_id = $2';
+  } else if (citizenPhone !== undefined) {
+    params.push(citizenPhone);
+    scope = 'AND i.citizen_phone = $2';
   }
   const { rows } = await query(
     `SELECT i.id, i.public_id, i.category, i.title, i.description, i.address, i.status, i.photos,
@@ -125,9 +130,11 @@ export async function getIssue(publicId, { corporatorId, staff = false } = {}) {
   };
   if (corporatorId !== undefined || staff) {
     issue.citizen = { name: row.citizen_name, phone: row.citizen_phone };
-    issue.assigned_to = row.assigned_name; // null = unassigned
     // Precise coordinates are for the assigned corporator only, like the contact details.
     issue.location = row.latitude === null ? null : { latitude: row.latitude, longitude: row.longitude };
+  }
+  if (corporatorId !== undefined || staff || citizenPhone !== undefined) {
+    issue.assigned_to = row.assigned_name; // null = unassigned
   }
   return issue;
 }
@@ -196,6 +203,31 @@ export async function listIssues({ corporatorId, wardNumber } = {}, { status, pa
 
 /** Corporator's inbox: their own issues only. */
 export const listCorporatorIssues = (corporatorId, filters) => listIssues({ corporatorId }, filters);
+
+/**
+ * Everything a phone number has reported, most recent first - including issues filed before the
+ * citizen ever signed in (their identity is the phone number, so there is nothing to "link" later).
+ * No filters or paging: a citizen's own list is short, so "basic details" beats building an inbox for it.
+ */
+export async function listCitizenIssues(phone) {
+  const { rows } = await query(
+    `SELECT i.public_id, i.title, i.category, i.status, i.created_at,
+            w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr
+       FROM issues i JOIN wards w ON w.id = i.ward_id
+      WHERE i.citizen_phone = $1
+      ORDER BY i.created_at DESC
+      LIMIT 200`,
+    [phone],
+  );
+  return rows.map((r) => ({
+    public_id: r.public_id,
+    title: r.title,
+    category: r.category,
+    status: r.status,
+    ward: { number: r.ward_number, name: r.ward_name, name_mr: r.ward_name_mr },
+    created_at: r.created_at,
+  }));
+}
 
 /**
  * Corporator posts an update (status change and/or remark and/or photos).

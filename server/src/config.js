@@ -24,6 +24,10 @@ export const config = {
   // Leave empty when the app and API share one origin.
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean),
   overdueDays: num(process.env.OVERDUE_DAYS, 7),
+  // PLACEHOLDER: every citizen phone number's OTP is this one fixed code until an SMS gateway is
+  // wired in (see services/otp.js). Replace that file with a real send + a random per-phone code
+  // when the SMS subscription is ready; nothing else needs to change.
+  otpCode: process.env.OTP_CODE || '1111',
   maxPhotos: 5,
   maxPhotoBytes: 5 * 1024 * 1024,
 };

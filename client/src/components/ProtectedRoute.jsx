@@ -9,7 +9,7 @@ export default function ProtectedRoute({ role }) {
   const location = useLocation();
 
   if (loading) return <Spinner />;
-  if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!auth) return <Navigate to={role === 'citizen' ? '/my/login' : '/login'} replace state={{ from: location.pathname }} />;
   // Signed in, but as the other role: send them to their own area rather than to a login page.
   if (auth.role !== role) return <Navigate to={homeFor(auth.role)} replace />;
   return <Outlet />;

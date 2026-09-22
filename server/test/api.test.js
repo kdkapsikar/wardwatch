@@ -41,7 +41,7 @@ function client() {
     const res = await fetch(base + url, { method, headers, body });
     const text = await res.text();
     const parsed = text ? JSON.parse(text) : null;
-    if (url === '/api/auth/login' && parsed?.token) token = parsed.token;
+    if ((url === '/api/auth/login' || url === '/api/citizen/otp/verify') && parsed?.token) token = parsed.token;
     if (url === '/api/auth/logout') token = '';
     return { status: res.status, body: parsed, headers: res.headers };
   };
@@ -74,7 +74,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  await query('TRUNCATE photos, issue_updates, issues, sessions, corporators, admins, wards RESTART IDENTITY CASCADE');
+  await query('TRUNCATE photos, issue_updates, issues, sessions, citizens, corporators, admins, wards RESTART IDENTITY CASCADE');
   const hash = await bcrypt.hash('correct-horse-1', 4);
   const w1 = (await query("INSERT INTO wards (number, name) VALUES (1, 'Ward One') RETURNING id")).rows[0].id;
   const w2 = (await query("INSERT INTO wards (number, name) VALUES (2, 'Ward Two') RETURNING id")).rows[0].id;
@@ -261,6 +261,79 @@ describe('citizen flow', () => {
     assert.equal((await api('GET', `/api/issues/${sloppy}`)).status, 200);
     assert.equal((await api('GET', '/api/issues/WW-AAAAAAAA')).status, 404);
     assert.equal((await api('GET', '/api/issues/garbage')).status, 404);
+  });
+});
+
+describe('citizen portal: OTP sign-in and "my issues"', () => {
+  test('requesting a code never reveals whether the number has reported anything, or fails outright', async () => {
+    const api = client();
+    assert.equal((await api('POST', '/api/citizen/otp/request', { json: { phone: '9876543210' } })).status, 204);
+    assert.equal((await api('POST', '/api/citizen/otp/request', { json: { phone: '9111111111' } })).status, 204);
+    assert.equal((await api('POST', '/api/citizen/otp/request', { json: { phone: 'not-a-phone' } })).status, 400);
+  });
+
+  test('the placeholder code is fixed (1111); anything else is rejected', async () => {
+    const api = client();
+    const wrong = await api('POST', '/api/citizen/otp/verify', { json: { phone: '9876543210', code: '0000' } });
+    assert.equal(wrong.status, 401);
+    const badFormat = await api('POST', '/api/citizen/otp/verify', { json: { phone: '9876543210', code: '11' } });
+    assert.equal(badFormat.status, 400);
+    const right = await api('POST', '/api/citizen/otp/verify', { json: { phone: '9876543210', code: '1111' } });
+    assert.equal(right.status, 200);
+    assert.equal(right.body.auth.role, 'citizen');
+    assert.equal(right.body.auth.user.phone, '9876543210');
+    assert.ok(right.body.token);
+    // Devanagari digits work here too, same as everywhere else a number is typed.
+    const devanagari = await api('POST', '/api/citizen/otp/verify', { json: { phone: '9876543210', code: '१111' } });
+    assert.equal(devanagari.status, 200);
+  });
+
+  test('signing in creates the citizen record on first use; signing in again reuses it', async () => {
+    const api = client();
+    await api('POST', '/api/citizen/otp/verify', { json: { phone: '9876543210', code: '1111' } });
+    await api('POST', '/api/auth/logout');
+    await api('POST', '/api/citizen/otp/verify', { json: { phone: '9876543210', code: '1111' } });
+    assert.equal((await query('SELECT count(*)::int AS n FROM citizens')).rows[0].n, 1);
+  });
+
+  test('sees every issue already filed with that phone number, most recent first, and only those', async () => {
+    const anon = client();
+    const mine1 = await anon('POST', '/api/issues', { form: issueForm({ phone: '9876543210', description: 'First report about a pothole' }) });
+    const mine2 = await anon('POST', '/api/issues', { form: issueForm({ phone: '9876543210', description: 'Second report about a leak' }) });
+    const other = await anon('POST', '/api/issues', { form: issueForm({ phone: '9111111111', description: 'Someone elses report' }) });
+
+    const me = client();
+    await me('POST', '/api/citizen/otp/verify', { json: { phone: '98765 43210', code: '1111' } }); // normalised the same way
+    const list = await me('GET', '/api/citizen/issues');
+    assert.equal(list.status, 200);
+    assert.deepEqual(list.body.issues.map((i) => i.public_id), [mine2.body.issue_id, mine1.body.issue_id]);
+    assert.ok(!list.body.issues.some((i) => i.public_id === other.body.issue_id));
+
+    const own = await me('GET', `/api/citizen/issues/${mine1.body.issue_id}`);
+    assert.equal(own.status, 200);
+    assert.equal(own.body.issue.description, 'First report about a pothole');
+    assert.equal(own.body.issue.assigned_to, 'Corp One');
+    // Not the staff-only fields: a citizen sees their own record, not a "contact card" about themselves.
+    assert.equal('citizen' in own.body.issue, false);
+    assert.equal('location' in own.body.issue, false);
+
+    const someoneElses = await me('GET', `/api/citizen/issues/${other.body.issue_id}`);
+    assert.equal(someoneElses.status, 404);
+  });
+
+  test('a new number that has never reported anything sees an empty list, not an error', async () => {
+    const me = client();
+    await me('POST', '/api/citizen/otp/verify', { json: { phone: '9222233334', code: '1111' } });
+    const list = await me('GET', '/api/citizen/issues');
+    assert.equal(list.status, 200);
+    assert.deepEqual(list.body.issues, []);
+  });
+
+  test('the citizen routes require a citizen session, not a corporator/admin one', async () => {
+    const corp = client();
+    await corp('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    assert.equal((await corp('GET', '/api/citizen/issues')).status, 403);
+    assert.equal((await client()('GET', '/api/citizen/issues')).status, 401);
   });
 });
 

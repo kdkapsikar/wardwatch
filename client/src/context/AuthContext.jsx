@@ -21,12 +21,18 @@ export function AuthProvider({ children }) {
     return auth;
   }, []);
 
+  const loginWithOtp = useCallback(async (phone, code) => {
+    const { auth } = await api.verifyOtp(phone, code);
+    setState({ loading: false, auth });
+    return auth;
+  }, []);
+
   const logout = useCallback(async () => {
     await api.logout().catch(() => {});
     setState({ loading: false, auth: null });
   }, []);
 
-  const value = useMemo(() => ({ ...state, login, logout }), [state, login, logout]);
+  const value = useMemo(() => ({ ...state, login, loginWithOtp, logout }), [state, login, loginWithOtp, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

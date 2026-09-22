@@ -6,8 +6,8 @@
 > `ward_id` columns and `ward` / `wards` JSON fields all mean "constituency". A constituency's areas are stored in
 > `wards.name`. Renaming the identifiers would be a pure refactor with no user-visible effect.
 
-Source of truth: [`server/db/migrations/`](../server/db/migrations). The five required tables plus one
-small `sessions` table (server-side login sessions, used instead of JWTs).
+Source of truth: [`server/db/migrations/`](../server/db/migrations). The five required tables plus
+`sessions` (server-side login sessions, used instead of JWTs), `admin_notes`, `photos` and `citizens`.
 
 ```mermaid
 erDiagram
@@ -16,13 +16,15 @@ erDiagram
     corporators ||--o{ issues : "assigned"
     issues ||--|{ issue_updates : "history"
     corporators ||--o{ issue_updates : "posts"
+    citizens ..o{ issues : "citizen_phone (no FK)"
 
-    wards        { int id PK  int number UK  text name }
+    wards        { int id PK  int number UK  text name  text name_mr }
     corporators  { int id PK  int ward_id FK,UK  text name  text username UK  text password_hash  bool is_active }
     admins       { int id PK  text name  text username UK  text password_hash  bool is_active }
     issues       { bigint id PK  text public_id UK  int ward_id FK  int corporator_id FK  text category  text title  text description  text address  float latitude  float longitude  text citizen_name  text citizen_phone  text_arr photos  text status  timestamptz consent_at  timestamptz created_at  timestamptz updated_at  timestamptz resolved_at }
-    issue_updates{ bigint id PK  bigint issue_id FK  int corporator_id FK  text status  text remark  text_arr photos  timestamptz created_at }
+    issue_updates{ bigint id PK  bigint issue_id FK  int corporator_id FK  text status  text remark  text rejection_reason  text_arr photos  text event  int from_ward_id FK  int to_ward_id FK  timestamptz created_at }
     sessions     { text token_hash PK  text role  int user_id  timestamptz expires_at }
+    citizens     { bigint id PK  text phone UK  timestamptz created_at }
 ```
 
 | Table | Notes |
@@ -30,11 +32,12 @@ erDiagram
 | `wards` | A **constituency**. `number` is its number, 1-29 (unique); `name` holds the areas it covers in English and `name_mr` in Marathi (see `server/db/constituencies.js`). |
 | `corporators` | **One per ward** (`ward_id` is UNIQUE, i.e. one corporator per constituency). Username unique case-insensitively (`lower(username)` index). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
 | `admins` | Mayor / admin accounts, same shape as corporators minus the ward. |
-| `issues` | `title` is a one-line headline **generated from the description** (first ~80 characters, cut at a word boundary; `server/src/lib/title.js`) - the form doesn't collect one and any `title` a client sends is ignored. `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
+| `issues` | `title` is a one-line headline **generated from the description** (first ~80 characters, cut at a word boundary; `server/src/lib/title.js`) - the form doesn't collect one and any `title` a client sends is ignored. `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile - it is what the citizen portal (`citizens.phone`) matches against; there is no foreign key, since issues are filed before an account may ever exist. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
 | `issue_updates` | Append-only history. `event` is `update` (status/remark/photos) or `transfer` (with `from_ward_id` / `to_ward_id`). `rejection_reason` is set when a corporator rejects (required by the API; NULL on older rows, whose explanation is in `remark`); proof photos use `photos`. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |
 | `admin_notes` | **Private** mayor/admin notes: `admin_id` (owner), optional `issue_id`, `body`, optional `budget_amount` (₹, `NUMERIC(14,2)`). Every query filters on the caller's `admin_id` (see `services/notes.js`), so a note is invisible to every other user. Deleting an issue keeps its notes (`issue_id` becomes NULL). |
-| `sessions` | Opaque bearer token → only its SHA-256 is stored. Expired rows are purged hourly. |
+| `sessions` | Opaque bearer token → only its SHA-256 is stored. `role` is `corporator`, `admin` or `citizen`; `user_id` points at the matching table. Expired rows are purged hourly. |
 | `photos` | Uploaded images (`name`, `content_type`, `data BYTEA`, ≤ 5 MB). `issues.photos` / `issue_updates.photos` hold `/uploads/<name>` URL paths that the API resolves against this table. Stored in the DB so they survive hosts with ephemeral disks. |
+| `citizens` | A citizen account: just `phone` (unique) - there is no name, password or profile. Created the first time a phone number verifies an OTP (`routes/citizen.js`); an issue filed with that number **before** the account existed still shows up, since the two are joined by phone number, not a foreign key. |
 
 Constraints worth knowing: status/category/length `CHECK`s live in the database, so bad data cannot get
 in even from a script. Indexes cover the hot paths: `(corporator_id, status)` for the corporator inbox,
@@ -58,6 +61,8 @@ All JSON under `/api`. Errors always look like
 | `GET /api/wards` | - | `{ wards: [{ id, number, name }] }` |
 | `POST /api/issues` | multipart: `ward_id, category, description, address?, latitude, longitude, name, phone, consent, photos[]` - required: all except `address` and `photos`. `phone` = 10-digit Indian mobile (6-9 start; `+91`/`91`/`0` prefix and spaces tolerated). `consent` must be `true`. `latitude`/`longitude` in -90..90 / -180..180 | `201 { issue_id, created_at }` · rate-limited |
 | `GET /api/issues/:publicId` | ID is normalised (case / missing dash tolerated) | `{ issue: { public_id, title, description, category, address, status, ward, photos, created_at, updated_at, resolved_at, updates: [{ status, remark, photos, by, created_at }] } }` - **no name/phone** · `404` if unknown |
+| `POST /api/citizen/otp/request` | JSON `{ phone }` | `204`, always, for a well-formed number - never reveals whether it has reported anything. Rate-limited (5/hour/IP) |
+| `POST /api/citizen/otp/verify` | JSON `{ phone, code }` (`code` = 4 digits) | `200 { token, auth: { role: "citizen", user: { id, phone } } }`. **`code` is checked against one fixed placeholder value** (`config.otpCode`, default `1111`) - see [Citizen portal](../README.md#citizen-portal) in the README. `401` on a wrong code. Rate-limited (10 failed/15 min/IP) |
 
 ### Auth (`Authorization: Bearer <token>`)
 
@@ -90,6 +95,13 @@ All JSON under `/api`. Errors always look like
 | `PUT /api/admin/notes/:id` | JSON `{ body, budget_amount? }` (empty budget clears it) → `{ note }`; `404` if it is not yours |
 | `DELETE /api/admin/notes/:id` | `204`; `404` if it is not yours |
 
+### Citizen (`Authorization: Bearer <token>`, `role: "citizen"`)
+
+| Method & path | Response |
+| --- | --- |
+| `GET /api/citizen/issues` | `{ issues: [{ public_id, title, category, status, ward, created_at }] }` - every issue filed with the signed-in phone number, most recent first (no paging: "basic details", not an inbox) |
+| `GET /api/citizen/issues/:publicId` | `{ issue }` - same shape as the public tracking view plus `assigned_to`; **no** `citizen`/`location` fields (those would just echo back what the citizen already knows). `404` if it was not filed with this phone number |
+
 `GET /uploads/<uuid>.<ext>` serves a stored photo from the `photos` table (`Cache-Control: immutable`, `Cross-Origin-Resource-Policy: cross-origin` so a web app on another origin can display it). In production every other non-API `GET`
 falls back to the React app's `index.html`.
 
@@ -104,6 +116,9 @@ falls back to the React app's `index.html`.
 | `/submitted/:id` | `IssueSubmitted` (shows/copies the Issue ID) | public |
 | `/track`, `/track/:id` | `TrackIssue` | public |
 | `/login` | `Login` (shared by corporators and admins; `/corporator/login`, `/admin/login` redirect here) | public |
+| `/my/login` | `CitizenLogin` (phone number, then a 4-digit code; no password) | public |
+| `/my` | `CitizenIssues` (every issue filed with the signed-in phone number; basic list, no dashboard) | citizen |
+| `/my/issues/:id` | `CitizenIssueDetail` (status, category, description, photos, history, who it is assigned to) | citizen |
 | `/corporator` | `CorporatorDashboard` (own numbers; every figure links to a filtered list) | corporator |
 | `/corporator/issues` | `CorporatorIssues` (status chips + category/overdue filter chips, from URL params; paged) | corporator |
 | `/corporator/issues/:id` | `CorporatorIssueDetail` (details, status buttons + rejection panel, transfer, history) | corporator |
@@ -113,17 +128,18 @@ falls back to the React app's `index.html`.
 | `/admin/notes` | `AdminNotes` (all my private notes, general or per issue) | admin |
 | `*` | `NotFound` | - |
 
-`ProtectedRoute` sends signed-out visitors to `/login` (and back afterwards), and signed-in users of the other role to their own home.
+`ProtectedRoute` sends signed-out visitors to `/login` (`/my/login` for `role="citizen"`; and back
+afterwards), and signed-in users of the other role to their own home.
 
 ### Component hierarchy
 
 ```
 main.jsx
 └─ BrowserRouter
-   └─ AuthProvider                       (context: auth, login, logout)
+   └─ AuthProvider                       (context: auth, login, loginWithOtp, logout)
       └─ App                             (route table)
          └─ Layout
-            ├─ Header                    (nav, sign out)
+            ├─ Header                    (nav, IssueIdSearch for staff, sign out)
             ├─ <Outlet />
             │   ├─ Home
             │   ├─ ReportIssue
@@ -141,6 +157,12 @@ main.jsx
             │   │   └─ IssueTimeline
             │   │       └─ PhotoGallery
             │   ├─ Login                 (Alert, FormField, show/hide password)
+            │   ├─ CitizenLogin          (phone step, then 4-digit code step; Alert, FormField)
+            │   ├─ ProtectedRoute role="citizen"
+            │   │   ├─ CitizenIssues     (basic list: title, status, category, constituency, date)
+            │   │   └─ CitizenIssueDetail
+            │   │       ├─ IssueDetails  (+ "assigned to", no contact/location)
+            │   │       └─ IssueTimeline
             │   ├─ ProtectedRoute role="corporator"
             │   │   ├─ CorporatorDashboard (StatCard links, StatusBar, needs-attention list, category table)
             │   │   ├─ CorporatorIssues  (status + filter chips, Alert, Spinner, StatusBadge)

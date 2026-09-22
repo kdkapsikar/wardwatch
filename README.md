@@ -1,20 +1,22 @@
 # WardWatch
 
-A simple civic grievance platform. Citizens report problems in their constituency (no account, no OTP), get a
-unique Issue ID, and track progress. Constituency corporators update the status with remarks and photos. The
-mayor / admin gets a city-wide dashboard.
+A simple civic grievance platform. Citizens report problems in their constituency without an account, get a
+unique Issue ID, and track progress by ID - or sign in with just their phone number (OTP, no password) to see
+every issue they have reported in one place. Constituency corporators update the status with remarks and
+photos. The mayor / admin gets a city-wide dashboard.
 
 **Stack:** React (Vite) · Tailwind CSS v4 · Node.js + Express 5 · PostgreSQL
 
 | Who | What they can do |
 | --- | --- |
 | **Citizen** (no login) | Report an issue with photos, a pin on the map (GPS or tap), constituency, name and phone → receive an Issue ID → look it up later and see the full update history |
+| **Citizen portal** (phone + OTP) | Sign in with just a mobile number to see every issue reported with that number, with basic status/timeline detail - no password, no separate signup (see [Citizen portal](#citizen-portal)) |
 | **Corporator** (username + password) | Own dashboard with drill-down, see their constituency's issues, change status with one-tap buttons, reject with a mandatory reason (+ optional proof photos), add optional remarks and photos, transfer an issue to another constituency |
 | **Mayor / Admin** (username + password) | Constituency-wise issue counts, resolution statistics, corporator performance summary, a category pie chart that drills down to the exact record, and private budget notes |
 
-Deliberately **not** in V1: OTP, JWT, SMS/email, GIS analysis. The one external service is the free
-OpenStreetMap tile server used by the report form's map (see [Location picker](#location-picker)).
-See [Known limitations](#known-limitations).
+Deliberately **not** in V1: JWT, real SMS delivery (the citizen OTP is a fixed placeholder for now - see
+[Citizen portal](#citizen-portal)), GIS analysis. The one external service is the free OpenStreetMap tile
+server used by the report form's map (see [Location picker](#location-picker)). See [Known limitations](#known-limitations).
 
 ## Quick start
 
@@ -61,6 +63,31 @@ configuration is needed.
 createdb wardwatch && createdb wardwatch_test
 # then set DATABASE_URL / TEST_DATABASE_URL in server/.env to match your Postgres user
 ```
+
+## Citizen portal
+
+A citizen's identity **is** their phone number - there is no separate signup form. At `/my/login`:
+
+1. Enter a 10-digit Indian mobile number and request a code (`POST /api/citizen/otp/request`).
+2. Enter the 4-digit code (`POST /api/citizen/otp/verify`). The first successful verification creates the
+   `citizens` row; signing in again with the same number reuses it.
+
+Once signed in, `/my` lists every issue ever filed with that phone number - including ones reported
+**before** the citizen ever signed in, since the report form never required an account. Each row opens a
+basic read-only record (status, category, constituency, description, photos, update history, and who it is
+assigned to) - deliberately not a full dashboard, per the brief ("basic details are good enough"). A
+corporator's or admin's own contact-card view of the same issue (name, phone, precise location) is not
+shown here; a citizen does not need their own phone number and address read back to them.
+
+**The OTP is a placeholder.** `server/src/services/otp.js` currently accepts one fixed code for every phone
+number (`OTP_CODE` in `.env`, default `1111`) and does not send anything - there is no SMS subscription yet.
+This means **anyone who knows a phone number can currently sign in as that citizen** (the OTP verifies
+nothing). Do not treat this login as a real access control until an SMS gateway is wired in. To go live:
+generate a random per-number code in `sendOtp`, store it with a short expiry (a table, or Redis) instead of
+comparing against `config.otpCode`, and actually send it. `routes/citizen.js` only calls
+`sendOtp`/`verifyOtp`, so nothing else needs to change. The two OTP endpoints are rate-limited
+(5 requests / hour / IP, 10 failed verifications / 15 min / IP) so this remains true once real SMS is billed
+per message.
 
 ## Corporator portal
 
@@ -163,16 +190,16 @@ wardwatch/
 │       ├── api/client.js         fetch wrapper + typed endpoint helpers
 │       ├── context/AuthContext   who is signed in (GET /api/auth/me)
 │       ├── components/           reusable UI (see docs/ARCHITECTURE.md)
-│       ├── pages/                route-level screens (citizen, corporator/, admin/)
+│       ├── pages/                route-level screens (citizen/, corporator/, admin/)
 │       └── lib/                  constants (statuses, categories), formatters
 ├── server/                     Express API
-│   ├── db/migrations/          ordered .sql files (001_init ... 005_photos)
+│   ├── db/migrations/          ordered .sql files (001_init ... 009_citizen_login)
 │   ├── scripts/                seed.js, create-user.js
 │   ├── src/
 │   │   ├── app.js                middleware + route wiring (createApp for tests)
 │   │   ├── index.js              process entry: listen, housekeeping, graceful shutdown
-│   │   ├── routes/               public, auth, corporator, admin
-│   │   ├── services/             issues, sessions, stats (all SQL lives here)
+│   │   ├── routes/               public, auth, corporator, admin, citizen
+│   │   ├── services/             issues, sessions, stats, otp (all SQL lives here)
 │   │   ├── middleware/           auth, upload, rateLimit, error
 │   │   └── lib/                  validation (zod), files (magic-byte checks), ids
 │   ├── test/api.test.js        integration tests
@@ -325,7 +352,10 @@ NODE_ENV=production npm start
 - CORS is off unless `CORS_ORIGINS` is set, and then only for exactly those origins.
 - Passwords are hashed with bcrypt (cost 12). Login errors are generic, and unknown usernames cost the
   same time as wrong passwords.
-- Rate limits: 10 failed logins / 15 min / IP, 10 issue submissions / hour / IP, 60 lookups / min / IP.
+- Rate limits: 10 failed logins / 15 min / IP, 10 issue submissions / hour / IP, 60 lookups / min / IP,
+  5 OTP requests / hour / IP, 10 failed OTP verifications / 15 min / IP.
+- **The citizen OTP is a placeholder, not a real access control** - see [Citizen portal](#citizen-portal).
+  Until an SMS gateway is wired in, anyone who knows a phone number can sign in as that citizen.
 - Uploads are validated by **magic bytes** (JPEG/PNG/WebP only), stored in Postgres under random names,
   capped at 5 files × 5 MB, and served with `nosniff` and long-lived immutable caching.
 - Issue IDs are random (≈8.5 × 10¹¹ possibilities), not sequential, and the public tracking view never
@@ -337,14 +367,15 @@ NODE_ENV=production npm start
 
 These are conscious V1 trade-offs, roughly in the order I'd tackle them:
 
-1. **No notifications.** Citizens must keep their Issue ID; corporators must check their inbox.
-   (Email/SMS was excluded from V1.)
+1. **No notifications.** Citizens must keep their Issue ID (or sign in to `/my` by phone number);
+   corporators must check their inbox. (Email/SMS was excluded from V1, and the citizen portal's OTP does
+   not send an SMS either - see [Citizen portal](#citizen-portal).)
 2. **No account-management UI**, password reset or password change - use `user:create` / SQL.
 3. **No reassignment.** Issues go to the constituency's corporator at submission; if a constituency has none the issue
    is stored unassigned (visible in the admin totals) and no one can act on it until an admin
    assigns it in SQL.
 4. **Photos live in Postgres** - simple and portable, but it grows the database; move to object storage (S3/R2) at scale.
-5. **Location is self-reported** - it's whatever the citizen's GPS or tap says; nothing checks that it falls inside the chosen constituency (no GIS/boundaries in V1). **No spam protection beyond rate limiting** (no CAPTCHA/OTP by design).
+5. **Location is self-reported** - it's whatever the citizen's GPS or tap says; nothing checks that it falls inside the chosen constituency (no GIS/boundaries in V1). **No spam protection beyond rate limiting** on the report form itself (no CAPTCHA, and it still does not require signing in).
 6. Migrations are forward-only (no down scripts).
 7. Tested on Node 26 + PostgreSQL 18 locally; CI targets Node 22 + PostgreSQL 16. The Docker Compose
    file has not been run in the environment this was built in (no Docker available there).

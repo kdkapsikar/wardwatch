@@ -31,22 +31,28 @@ const optionalText = (label, max) =>
     z.string().max(max, `${label} must be at most ${max} characters`).optional(),
   );
 
+// Devanagari digits (\u0966-\u096F) are accepted anywhere a number is typed: a Marathi keyboard types them.
+const toLatinDigits = (input) => String(input ?? '').replace(/[\u0966-\u096F]/g, (d) => String(d.charCodeAt(0) - 0x0966));
+
 /**
  * Indian mobile number: 10 digits starting with 6-9. Spaces, dashes and brackets are ignored and a
  * leading +91 / 91 / 0 is accepted and dropped, so "+91 98765-43210" and "09876543210" both become
  * "9876543210". Returns null when the input is not a valid mobile number.
  */
 export function normalizeIndianMobile(input) {
-  // Devanagari digits (\u0966-\u096F) are accepted: a Marathi keyboard types them.
-  const latin = String(input ?? '').replace(/[\u0966-\u096F]/g, (d) => String(d.charCodeAt(0) - 0x0966));
-  const compact = latin.replace(/[\s()-]/g, '');
+  const compact = toLatinDigits(input).replace(/[\s()-]/g, '');
   const match = compact.match(/^(?:\+91|91|0)?([6-9]\d{9})$/);
   return match ? match[1] : null;
 }
 
-const phone = z.preprocess(
+export const phone = z.preprocess(
   (v) => normalizeIndianMobile(v) ?? '',
   z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
+);
+
+const otpCode = z.preprocess(
+  (v) => toLatinDigits(v).trim(),
+  z.string().regex(/^\d{4}$/, 'Enter the 4-digit code'),
 );
 
 // Ticked checkbox arrives as the string "true" in multipart form data.
@@ -82,6 +88,9 @@ export const loginSchema = z.object({
   username: text('Username', { max: 100 }),
   password: z.preprocess((v) => (typeof v === 'string' ? v : ''), z.string().min(1, 'Password is required').max(200)),
 });
+
+export const otpRequestSchema = z.object({ phone });
+export const otpVerifySchema = z.object({ phone, code: otpCode });
 
 // The remark is always optional. Rejecting requires a rejection_reason - enforced in
 // services/issues.js, where the issue's current status is known.

@@ -10,12 +10,16 @@ const USER_SQL = {
                       w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr
                  FROM corporators c JOIN wards w ON w.id = c.ward_id
                 WHERE c.id = $1`,
+  // A citizen has no username/password/is_active - their phone number IS the account.
+  citizen: `SELECT id, phone FROM citizens WHERE id = $1`,
 };
 
 export async function findUser(role, id) {
   const { rows } = await query(USER_SQL[role], [id]);
   const row = rows[0];
-  if (!row || !row.is_active) return null;
+  if (!row) return null;
+  if (role === 'citizen') return { id: row.id, phone: row.phone };
+  if (!row.is_active) return null;
   const user = { id: row.id, name: row.name, username: row.username };
   if (role === 'corporator') user.ward = { id: row.ward_id, number: row.ward_number, name: row.ward_name, name_mr: row.ward_name_mr };
   return user;

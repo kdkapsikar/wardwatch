@@ -31,3 +31,18 @@ export const lookupLimiter = limiter({
   limit: 60,
   message: 'Too many lookups. Please slow down.',
 });
+
+// Requesting a code costs money once real SMS is wired in, so it is limited harder than a login.
+export const otpRequestLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: 'Too many code requests. Please try again later.',
+});
+
+// Only failed attempts count, same reasoning as loginLimiter.
+export const otpVerifyLimiter = limiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  message: 'Too many attempts. Try again in 15 minutes.',
+});
