@@ -23,7 +23,9 @@ export default function Header() {
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         <Link to="/" className="flex items-center gap-2 text-lg font-bold text-brand-700">
           <img src={publicUrl('favicon.svg')} alt="" className="h-7 w-7" />
-          WardWatch
+          {/* Brand name: fixed in both languages (not translated), like a wordmark. `lang` is set
+              explicitly so a screen reader pronounces it correctly even on the English page. */}
+          <span lang="mr">e-नगरसेवक</span>
         </Link>
         {/* Language switch: top-right on every screen size (on phones it shares the logo's row). */}
         <div className="ml-auto sm:order-last sm:ml-0">

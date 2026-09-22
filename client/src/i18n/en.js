@@ -1,8 +1,8 @@
 // GENERATED once from the master translation table; edit freely from here on.
 // en.js and mr.js MUST keep identical keys and {placeholders} - server/test/i18n.test.js enforces it.
 export default {
-  "app.title": "WardWatch - report and track civic issues",
-  "app.tagline": "WardWatch - a civic grievance tracker",
+  "app.title": "e-नगरसेवक - report and track civic issues",
+  "app.tagline": "e-नगरसेवक - a civic grievance tracker",
   "lang.label": "Language",
   "a11y.skip": "Skip to content",
   "nav.main": "Main",

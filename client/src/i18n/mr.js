@@ -3,8 +3,8 @@
 // Marathi text: written by an AI assistant - please have a native Marathi speaker review it,
 // especially official terms (नगरसेवक, प्रभाग, तक्रार).
 export default {
-  "app.title": "WardWatch - नागरी तक्रारी नोंदवा आणि त्यांचा मागोवा घ्या",
-  "app.tagline": "WardWatch - नागरी तक्रार निवारण व्यासपीठ",
+  "app.title": "e-नगरसेवक - नागरी तक्रारी नोंदवा आणि त्यांचा मागोवा घ्या",
+  "app.tagline": "e-नगरसेवक - नागरी तक्रार निवारण व्यासपीठ",
   "lang.label": "भाषा",
   "a11y.skip": "मुख्य मजकुराकडे जा",
   "nav.main": "मुख्य मेनू",
