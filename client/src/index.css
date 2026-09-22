@@ -1,16 +1,24 @@
+/* Hind: an Indian Type Foundry sans that natively covers Devanagari alongside Latin, so English
+   and Marathi share one typeface instead of Marathi falling back to a mismatched system font.
+   Open (SIL OFL) - free for commercial use. Must precede @import "tailwindcss" below: Tailwind's
+   import expands into @layer rules, and a later @import after any non-import rule is invalid CSS. */
+@import url("https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
+/* "Municipal Blue" theme: see the theme-options design exploration for the full palette set. */
 @theme {
-  --color-brand-50: #eef7fc;
-  --color-brand-100: #d5ebf7;
-  --color-brand-600: #0f5f8a;
-  --color-brand-700: #0c4d71;
-  --color-brand-800: #0a3d5a;
+  --color-brand-50: #eef5f9;
+  --color-brand-100: #d2e6ee;
+  --color-brand-600: #0b4f73;
+  --color-brand-700: #093f5c;
+  --color-brand-800: #073048;
+  --font-sans: "Hind", ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: var(--font-sans);
   }
 }
 

@@ -30,6 +30,10 @@ export function createApp() {
           // blob: lets the upload form preview photos before they are sent;
           // tile.openstreetmap.org serves the map tiles on the report form.
           'img-src': ["'self'", 'data:', 'blob:', 'https://tile.openstreetmap.org'],
+          // fonts.googleapis.com serves the Hind stylesheet (Devanagari-capable, so English and
+          // Marathi share one typeface); fonts.gstatic.com serves the font files it references.
+          'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          'font-src': ["'self'", 'https://fonts.gstatic.com'],
           // Forcing https breaks plain-HTTP local runs, so it is opt-out.
           'upgrade-insecure-requests': config.forceHttps ? [] : null,
         },

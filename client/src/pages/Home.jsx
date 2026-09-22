@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useT } from '../i18n/LanguageContext.jsx';
+import CitizenIllustration from '../components/illustrations/CitizenIllustration.jsx';
 
 export default function Home() {
   const { t } = useT();
@@ -7,7 +8,10 @@ export default function Home() {
   return (
     <div className="space-y-12">
       <section className="py-6 text-center sm:py-12">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+        <div className="mx-auto max-w-xs rounded-2xl bg-brand-50 p-4 sm:max-w-sm">
+          <CitizenIllustration className="h-auto w-full" />
+        </div>
+        <h1 className="mt-8 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
           {t('home.title1')} <span className="text-brand-600">{t('home.title2')}</span>
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-slate-600">{t('home.intro')}</p>

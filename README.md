@@ -135,6 +135,25 @@ language instantly; the choice is remembered in the browser, and a browser set t
   or if an API error message has no Marathi version (`serverMessages` in `mr.js`).
 - To load/refresh the Marathi place names in a database: `npm run constituencies:load -w server`.
 
+## Look and feel
+
+- **Theme:** "Municipal Blue" - a deep blue (`--color-brand-600: #0b4f73` in `client/src/index.css`) with an amber
+  accent used sparingly (Tailwind's stock `amber-500`, already reused from the "in progress" status color, so the
+  accent always means "this needs a look"). Chosen from a small set of original palette explorations (not copied
+  from any real brand, government emblem or municipal corporation's actual logo).
+- **Typeface:** [Hind](https://fonts.google.com/specimen/Hind), loaded from Google Fonts (open, SIL OFL, free for
+  commercial use, no attribution required). It was designed by an Indian type foundry with **native Devanagari
+  support in the same family**, so English and Marathi text share one typeface instead of Marathi falling back to
+  a mismatched system font. Loading it needs `style-src`/`font-src` entries for `fonts.googleapis.com` /
+  `fonts.gstatic.com` in both CSPs (`server/src/app.js` and `client/vite.config.js`'s build-time `<meta>` CSP for
+  GitHub Pages) - add the same two origins there if you swap the font.
+- **Illustrations** (`client/src/components/illustrations/`) - one small original SVG scene per audience, all
+  hand-drawn from basic shapes (no stock art, no photos, so there is nothing to license or attribute): a citizen
+  reporting a pothole (`CitizenIllustration`, on the Home page), a corporator reviewing their ward on a tablet
+  (`CorporatorIllustration`, on `/corporator`), and a mayor's-eye view of the city (`AdminIllustration`, on
+  `/admin`). They use the same theme tokens as everything else (`fill-brand-600`, `fill-amber-500`, `fill-slate-900`),
+  so a future theme change re-colors them for free.
+
 ## Report form rules
 
 Required (marked `*`): constituency, issue category, description, location, full name, mobile number, and the

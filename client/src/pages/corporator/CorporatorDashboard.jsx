@@ -9,6 +9,7 @@ import StatCard from '../../components/ui/StatCard.jsx';
 import StatusBadge from '../../components/ui/StatusBadge.jsx';
 import { STATUS, STATUS_ORDER } from '../../lib/constants.js';
 import { formatHours, formatPercent } from '../../lib/format.js';
+import CorporatorIllustration from '../../components/illustrations/CorporatorIllustration.jsx';
 
 const issues = (params) => `/corporator/issues?${new URLSearchParams(params)}`;
 
@@ -65,9 +66,14 @@ export default function CorporatorDashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">{t('dash.corp.title')}</h1>
-        <p className="mt-1 text-sm text-slate-600">{t('detail.constituencyValue', { n: ward.number, name: wardName(ward) })}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{t('dash.corp.title')}</h1>
+          <p className="mt-1 text-sm text-slate-600">{t('detail.constituencyValue', { n: ward.number, name: wardName(ward) })}</p>
+        </div>
+        <div className="hidden shrink-0 rounded-xl bg-brand-50 p-2 sm:block">
+          <CorporatorIllustration className="aspect-[240/190] h-24" />
+        </div>
       </div>
 
       {totals.total === 0 ? (

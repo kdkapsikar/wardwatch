@@ -19,7 +19,10 @@ function contentSecurityPolicy(apiUrl) {
       const policy = [
         "default-src 'self'",
         "script-src 'self'",
-        "style-src 'self' 'unsafe-inline'", // Leaflet positions tiles/markers with inline styles
+        // Leaflet positions tiles/markers with inline styles; fonts.googleapis.com serves the Hind
+        // stylesheet (Devanagari-capable, so English and Marathi share one typeface).
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
         `img-src 'self' data: blob: ${api} https://tile.openstreetmap.org`,
         `connect-src 'self' ${api}`,
         "object-src 'none'",
