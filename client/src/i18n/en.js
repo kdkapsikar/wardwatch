@@ -3,6 +3,7 @@
 export default {
   "app.title": "e-नगरसेवक - report and track civic issues",
   "app.tagline": "e-नगरसेवक - a civic grievance tracker",
+  "app.poweredBy": "Developed by Bridge to Better Tech (B2BT)",
   "lang.label": "Language",
   "a11y.skip": "Skip to content",
   "nav.main": "Main",

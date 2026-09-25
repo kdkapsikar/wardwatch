@@ -5,6 +5,7 @@
 export default {
   "app.title": "e-नगरसेवक - नागरी तक्रारी नोंदवा आणि त्यांचा मागोवा घ्या",
   "app.tagline": "e-नगरसेवक - नागरी तक्रार निवारण व्यासपीठ",
+  "app.poweredBy": "Bridge to Better Tech (B2BT) द्वारे विकसित",
   "lang.label": "भाषा",
   "a11y.skip": "मुख्य मजकुराकडे जा",
   "nav.main": "मुख्य मेनू",
