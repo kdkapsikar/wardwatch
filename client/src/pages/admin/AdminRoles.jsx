@@ -9,7 +9,7 @@ const NONE = '__none__';
 
 /** One constituency's corporator: a dropdown of every active corporator account (from Accounts), with
  *  a Save that appears once the pick differs from what is currently assigned. A corporator covers
- *  exactly one constituency, so - unlike Mandal Adhyaksh below - this is one row at a time, not bulk. */
+ *  exactly one constituency, so picking one here moves them away from wherever they were. */
 function CorporatorCell({ ward, corporators, onChanged }) {
   const { t } = useT();
   const current = ward.corporator ? String(ward.corporator.id) : NONE;
@@ -54,10 +54,56 @@ function CorporatorCell({ ward, corporators, onChanged }) {
   );
 }
 
+/** One constituency's Mandal Adhyaksh: same picker as the corporator above, but a Mandal Adhyaksh can
+ *  cover more than one constituency, so picking them here does not move or free them from anywhere. */
+function MandalCell({ ward, mandalList, onChanged }) {
+  const { t } = useT();
+  const current = ward.mandal_adhyaksh ? String(ward.mandal_adhyaksh.id) : NONE;
+  const [selection, setSelection] = useState(current);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => { setSelection(current); setError(''); }, [current]);
+
+  const dirty = selection !== current;
+
+  async function save() {
+    setSaving(true);
+    setError('');
+    try {
+      await api.assignMandalAdhyaksh(ward.id, selection === NONE ? null : Number(selection));
+      onChanged(t('roles.grid.assigned'));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="min-w-[190px] space-y-1">
+      <select className="input px-2 py-1 text-sm" value={selection} onChange={(e) => setSelection(e.target.value)}>
+        <option value={NONE}>{t('accounts.unassigned')}</option>
+        {mandalList.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.first_name} {m.last_name} ({t('roles.mandal.wardCount', { n: m.ward_count, count: m.ward_count })})
+          </option>
+        ))}
+      </select>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {dirty && (
+        <button type="button" onClick={save} disabled={saving} className="text-xs font-medium text-brand-700 hover:underline disabled:opacity-60">
+          {saving ? t('roles.saving') : t('roles.grid.save')}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
- * Mayor/admin only: assigns which corporator and which Mandal Adhyaksh covers each constituency.
- * Accounts themselves (name, username, role) are created and edited on the Accounts page - this grid
- * only ever picks among *existing* accounts. Constituency stays the base row.
+ * Mayor/admin only: assigns which corporator and which Mandal Adhyaksh covers each constituency, the
+ * same way for both - a dropdown per row of existing accounts (from the Accounts page), with a Save
+ * that appears once the pick changes. Constituency stays the base row.
  */
 export default function AdminRoles() {
   const { t, wardName } = useT();
@@ -66,9 +112,6 @@ export default function AdminRoles() {
   const [loadError, setLoadError] = useState('');
   const [flash, setFlash] = useState('');
   const [filter, setFilter] = useState('');
-  const [selected, setSelected] = useState(() => new Set());
-  const [bulkTarget, setBulkTarget] = useState('');
-  const [bulkBusy, setBulkBusy] = useState(false);
 
   function load() {
     return Promise.all([api.getRoster(), api.getAccounts()])
@@ -97,33 +140,6 @@ export default function AdminRoles() {
     load();
   }
 
-  function toggleOne(wardId) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(wardId)) next.delete(wardId); else next.add(wardId);
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    setSelected((prev) => (prev.size === filtered.length ? new Set() : new Set(filtered.map((w) => w.id))));
-  }
-
-  async function applyBulk() {
-    if (selected.size === 0 || bulkTarget === '') return;
-    setBulkBusy(true);
-    const adminId = bulkTarget === NONE ? null : Number(bulkTarget);
-    const ids = [...selected];
-    const results = await Promise.allSettled(ids.map((wardId) => api.assignMandalAdhyaksh(wardId, adminId)));
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    setFlash(failed === 0
-      ? t('roles.grid.bulkApplied', { n: ids.length, count: ids.length })
-      : t('roles.grid.bulkPartial', { ok: ids.length - failed, fail: failed }));
-    setSelected(new Set());
-    setBulkBusy(false);
-    await load();
-  }
-
   const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500';
 
   return (
@@ -137,30 +153,6 @@ export default function AdminRoles() {
 
       <Alert tone="success">{flash}</Alert>
 
-      <section className="card p-5">
-        <h2 className="text-sm font-semibold">{t('roles.grid.bulkAssignLabel')}</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <select className="input w-56 px-2 py-1.5 text-sm" value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value)}>
-            <option value="" disabled>{t('roles.grid.bulkAssignPlaceholder')}</option>
-            <option value={NONE}>{t('roles.grid.bulkUnassign')}</option>
-            {mandalList.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.first_name} {m.last_name} ({t('roles.mandal.wardCount', { n: m.ward_count, count: m.ward_count })})
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={applyBulk}
-            disabled={selected.size === 0 || bulkTarget === '' || bulkBusy}
-            className="btn btn-primary px-3 py-1.5 text-sm"
-          >
-            {bulkBusy ? t('roles.saving') : t('roles.grid.bulkApply', { n: selected.size, count: selected.size })}
-          </button>
-        </div>
-        <p className="mt-1 text-xs text-slate-500">{t('roles.grid.selected', { n: selected.size, count: selected.size })}</p>
-      </section>
-
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <h2 className="font-semibold">{t('roles.overview')}</h2>
@@ -172,17 +164,9 @@ export default function AdminRoles() {
           />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px]">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-slate-50">
               <tr>
-                <th className={th}>
-                  <input
-                    type="checkbox"
-                    aria-label={t('roles.grid.selectAll')}
-                    checked={filtered.length > 0 && selected.size === filtered.length}
-                    onChange={toggleAll}
-                  />
-                </th>
                 <th className={th}>{t('admin.dash.col.ward')}</th>
                 <th className={th}>{t('roles.corporator.heading')}</th>
                 <th className={th}>{t('roles.mandal.heading')}</th>
@@ -190,10 +174,7 @@ export default function AdminRoles() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((w) => (
-                <tr key={w.id} className={selected.has(w.id) ? 'bg-brand-50/40' : undefined}>
-                  <td className="px-3 py-3 align-top">
-                    <input type="checkbox" checked={selected.has(w.id)} onChange={() => toggleOne(w.id)} aria-label={t('detail.constituencyValue', { n: w.number, name: wardName(w) })} />
-                  </td>
+                <tr key={w.id}>
                   <td className="px-3 py-3 align-top text-sm">
                     <p className="font-medium">{t('list.constituencyChip', { n: w.number })}</p>
                     <p className="mt-0.5 max-w-[16rem] text-xs text-slate-500">{wardName(w)}</p>
@@ -201,13 +182,13 @@ export default function AdminRoles() {
                   <td className="px-3 py-3 align-top">
                     <CorporatorCell ward={w} corporators={corporators} onChanged={handleChanged} />
                   </td>
-                  <td className="px-3 py-3 align-top text-sm">
-                    {w.mandal_adhyaksh ? w.mandal_adhyaksh.name : <span className="text-slate-400">{t('roles.none')}</span>}
+                  <td className="px-3 py-3 align-top">
+                    <MandalCell ward={w} mandalList={mandalList} onChanged={handleChanged} />
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-500">{t('roles.grid.noResults')}</td></tr>
+                <tr><td colSpan={3} className="px-3 py-6 text-center text-sm text-slate-500">{t('roles.grid.noResults')}</td></tr>
               )}
             </tbody>
           </table>

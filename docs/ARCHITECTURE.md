@@ -132,7 +132,7 @@ Backs the **Manage roles** grid (`services/roster.js`'s `getRoster`/`assignCorpo
 | --- | --- | --- |
 | `GET /api/admin/roster` | - | `{ wards: [{ id, number, name, name_mr, corporator, mandal_adhyaksh }] }` - `corporator`/`mandal_adhyaksh` (each `{ id, name, username }`) are `null` when unassigned. Which accounts are *available* to assign comes from `GET /api/admin/accounts`, not from here |
 | `PUT /api/admin/roster/wards/:wardId/corporator` | `{ corporator_id: number \| null }` | `200 { ward, corporator }`; `null` clears it. Assigning an id **moves** that corporator here, freeing whoever covered this constituency before them (a corporator covers exactly one constituency at a time - unlike a Mandal Adhyaksh, this is never additive) |
-| `PUT /api/admin/roster/wards/:wardId/mandal-adhyaksh` | `{ admin_id: number \| null }` | `200 { ward, mandal_adhyaksh }`; `null` clears the constituency's assignment. One `admin_id` can be assigned to many constituencies by calling this once per constituency - the client's bulk-assign toolbar in `AdminRoles.jsx` calls this once per **selected** constituency (`Promise.allSettled`), which is what "select several rows, apply one Mandal Adhyaksh, save" resolves to on the wire |
+| `PUT /api/admin/roster/wards/:wardId/mandal-adhyaksh` | `{ admin_id: number \| null }` | `200 { ward, mandal_adhyaksh }`; `null` clears the constituency's assignment. Unlike `assignCorporator`, this is purely additive - one `admin_id` can be assigned to many constituencies by calling this once per constituency, and doing so never clears any of their other rows |
 
 ### Citizen (`Authorization: Bearer <token>`, `role: "citizen"`)
 
@@ -166,7 +166,7 @@ falls back to the React app's `index.html`.
 | `/admin/issues/:id` | `AdminIssueDetail` (the exact record, read-only, with private notes on it) | admin, `adminRole="admin"` |
 | `/admin/notes` | `AdminNotes` (all my private notes, general or per issue) | admin, `adminRole="admin"` |
 | `/admin/accounts` | `AdminAccounts` (every account - corporator, Mandal Adhyaksh, admin - as one table: first/last name, username, role, constituency; create/edit/deactivate) | admin, `adminRole="admin"` |
-| `/admin/roles` | `AdminRoles` (Manage roles: a grid, one row per constituency - a corporator dropdown per row, checkbox rows + a toolbar to bulk-assign a Mandal Adhyaksh to several constituencies at once; people themselves come from Accounts) | admin, `adminRole="admin"` |
+| `/admin/roles` | `AdminRoles` (Manage roles: a grid, one row per constituency - a corporator dropdown and a Mandal Adhyaksh dropdown per row, each with its own Save; people themselves come from Accounts) | admin, `adminRole="admin"` |
 | `/mandal`, `/mandal/issues`, `/mandal/issues/:id`, `/mandal/notes` | the **same** `AdminDashboard` / `AdminIssues` / `AdminIssueDetail` / `AdminNotes` components as `/admin/*`, mounted under a `PortalProvider` that points their internal links at `/mandal` instead - see [Component hierarchy](#component-hierarchy) | admin, `adminRole="mandal_adhyaksh"` |
 | `*` | `NotFound` | - |
 
@@ -223,7 +223,7 @@ main.jsx
             │   │   ├─ AdminIssueDetail  (IssueDetails, CitizenContact, NotesPanel, IssueTimeline)
             │   │   ├─ AdminNotes        (NotesPanel)
             │   │   ├─ AdminAccounts     (AccountRow per account, role filter + search, add-account form)
-            │   │   └─ AdminRoles        (grid: CorporatorCell dropdown per row, checkbox + bulk-assign toolbar for Mandal Adhyaksh)
+            │   │   └─ AdminRoles        (grid: CorporatorCell + MandalCell, one dropdown-and-Save pair each, per row)
             │   ├─ ProtectedRoute role="admin" adminRole="mandal_adhyaksh"
             │   │   └─ PortalProvider basePath="/mandal"   (context: usePortal() - see below)
             │   │       ├─ AdminDashboard    (same component; scope banner lists the caller's constituencies)

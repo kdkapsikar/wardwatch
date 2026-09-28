@@ -130,12 +130,12 @@ per message.
   demo accounts).
 - **Manage roles** (`/admin/roles`, Mayor/Admin only) - assignment only, a **grid** with one row per
   constituency (people themselves are managed on Accounts above):
-  - **Corporator** - a dropdown of every corporator account; picking one moves them to this constituency
-    (freeing whoever covered it before - a corporator covers exactly one constituency at a time) and a
-    **Save** applies it, one row at a time.
-  - **Mandal Adhyaksh** - tick the checkbox on as many constituency rows as you like, pick a Mandal Adhyaksh
-    (or "— Unassign —") from the toolbar above the grid, and **Apply to N constituencies** assigns all of
-    them at once - the fast way to hand, say, 3 constituencies each to 10 people.
+  - **Corporator** and **Mandal Adhyaksh** are picked the same way - a dropdown per row of every existing
+    account for that role (or "Unassigned"), with a **Save** that appears once the pick changes. Picking a
+    corporator **moves** them here, freeing whoever covered this constituency before (a corporator covers
+    exactly one constituency at a time); picking a Mandal Adhyaksh only adds this constituency to theirs -
+    one Mandal Adhyaksh can be picked on any number of rows, so handing 3 constituencies to each of 10
+    people is 30 row-by-row picks (each labelled with how many constituencies that person already has).
   - A search box filters the grid's rows by constituency number or name.
 
 ## Mandal Adhyaksh portal
