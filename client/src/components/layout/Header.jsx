@@ -45,7 +45,8 @@ export default function Header() {
               {isStaff && <NavLink to={staffBase} end className={navClass}>{t('nav.dashboard')}</NavLink>}
               {isStaff && <NavLink to={`${staffBase}/issues`} className={navClass}>{t('nav.issues')}</NavLink>}
               {auth.role === 'admin' && <NavLink to={`${adminBase}/notes`} className={navClass}>{t('nav.notes')}</NavLink>}
-              {/* Managing who covers which constituency is the mayor/admin's job, not a Mandal Adhyaksh's own. */}
+              {/* Managing accounts and who covers which constituency is the mayor/admin's job, not a Mandal Adhyaksh's own. */}
+              {auth.role === 'admin' && !isMandal && <NavLink to="/admin/accounts" className={navClass}>{t('nav.accounts')}</NavLink>}
               {auth.role === 'admin' && !isMandal && <NavLink to="/admin/roles" className={navClass}>{t('nav.manageRoles')}</NavLink>}
               {isStaff && <IssueIdSearch basePath={staffBase} />}
               <button

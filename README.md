@@ -118,20 +118,25 @@ per message.
 - The pie chart uses one fixed colour per category from a colour-blind-checked palette, with a legend table showing
   every count and share (so nothing depends on colour or hover alone); with 7 categories it is at the upper limit of
   what a pie communicates well, which is why the table is always shown next to it.
-- **Manage roles** (`/admin/roles`, Mayor/Admin only) - a **grid**, one row per constituency:
-  - **Corporator** - always-editable Name/Username fields right in the row. Fill them in to create one where
-    there is none; edit them and a **Save** link appears to update the same account in place (fixes their
-    details without disturbing their login or issue history) - a separate **Deactivate** (2-step confirm)
-    frees the constituency for a different person entirely.
+- **Accounts** (`/admin/accounts`, Mayor/Admin only) - every account in the system as one table: **First
+  name, Last name, Username, Role** (Corporator / Mandal Adhyaksh / Mayor-Admin), and, for a corporator or
+  Mandal Adhyaksh, which constituency (or how many) they currently cover. A small form above it creates a
+  new Corporator or Mandal Adhyaksh account (unassigned - assign it on Manage roles below); every row's
+  name/username is editable in place, with a **Save** that updates the same account (no password reset, no
+  disrupted login or history). A role filter and a search box narrow the table. Admin (Mayor) accounts are
+  listed for visibility but not creatable or deactivatable here - creating the first one is still
+  `npm run user:create` (see [Known limitations](#known-limitations)); new Corporator/Mandal Adhyaksh
+  accounts get a placeholder password (`corporator123` / `mandal12345`, same spirit as `npm run seed`'s
+  demo accounts).
+- **Manage roles** (`/admin/roles`, Mayor/Admin only) - assignment only, a **grid** with one row per
+  constituency (people themselves are managed on Accounts above):
+  - **Corporator** - a dropdown of every corporator account; picking one moves them to this constituency
+    (freeing whoever covered it before - a corporator covers exactly one constituency at a time) and a
+    **Save** applies it, one row at a time.
   - **Mandal Adhyaksh** - tick the checkbox on as many constituency rows as you like, pick a Mandal Adhyaksh
     (or "— Unassign —") from the toolbar above the grid, and **Apply to N constituencies** assigns all of
-    them at once - the fast way to hand, say, 3 constituencies each to 10 people. A small "Create a Mandal
-    Adhyaksh" form above the grid adds a new account (unassigned) that then shows up in that dropdown; a
-    "Mandal Adhyaksh accounts" list below the grid can rename (same in-place edit as a corporator) or fully
-    deactivate one (ending every constituency they cover, not just one).
+    them at once - the fast way to hand, say, 3 constituencies each to 10 people.
   - A search box filters the grid's rows by constituency number or name.
-  - New accounts get a placeholder password (`corporator123` / `mandal12345`, same spirit as `npm run
-    seed`'s demo accounts) - there is no forced reset yet, see [Known limitations](#known-limitations).
 
 ## Mandal Adhyaksh portal
 
@@ -277,9 +282,10 @@ Full details - database schema, every API route, pages and the component tree - 
 
 ## Managing accounts and constituencies
 
-Corporators and Mandal Adhyaksh accounts are managed day-to-day from **Manage roles** (`/admin/roles`, see
-[Mayor / Admin portal](#mayor--admin-portal)) - no SQL needed for those. The Mayor/Admin account itself (there
-is no UI to create the first one, or a second admin) still goes through the CLI:
+Corporator and Mandal Adhyaksh accounts are managed day-to-day from **Accounts** (create/edit) and
+**Manage roles** (assign to a constituency) - see [Mayor / Admin portal](#mayor--admin-portal) - no SQL
+needed for those. The Mayor/Admin account itself (there is no UI to create the first one, or a second
+admin) still goes through the CLI:
 
 ```bash
 # Corporator (one per constituency) and admin. Password comes from $WW_PASSWORD or a hidden prompt.
@@ -434,7 +440,7 @@ These are conscious V1 trade-offs, roughly in the order I'd tackle them:
    corporators must check their inbox. (Email/SMS was excluded from V1, and the citizen portal's OTP does
    not send an SMS either - see [Citizen portal](#citizen-portal).)
 2. **No password reset or password change**, and no UI for the Mayor/Admin account itself - use `user:create` /
-   SQL. (Corporators and Mandal Adhyaksh accounts *can* now be created from **Manage roles** - see
+   SQL. (Corporators and Mandal Adhyaksh accounts *can* now be created and edited from **Accounts** - see
    [Managing accounts](#managing-accounts-and-constituencies) - but they get a fixed placeholder password with
    no forced reset.)
 3. **No reassignment.** Issues go to the constituency's corporator at submission; if a constituency has none the issue

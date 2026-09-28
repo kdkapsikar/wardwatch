@@ -22,8 +22,8 @@ erDiagram
     admins ||--o{ admin_wards : "covers many"
 
     wards        { int id PK  int number UK  text name  text name_mr }
-    corporators  { int id PK  int ward_id FK,UK  text name  text username UK  text password_hash  bool is_active }
-    admins       { int id PK  text name  text username UK  text password_hash  bool is_active  text role }
+    corporators  { int id PK  int ward_id FK,UK  text first_name  text last_name  text name  text username UK  text password_hash  bool is_active }
+    admins       { int id PK  text first_name  text last_name  text name  text username UK  text password_hash  bool is_active  text role }
     admin_wards  { int ward_id PK,FK  int admin_id FK }
     issues       { bigint id PK  text public_id UK  int ward_id FK  int corporator_id FK  text category  text title  text description  text address  float latitude  float longitude  text citizen_name  text citizen_phone  text_arr photos  text status  timestamptz consent_at  timestamptz created_at  timestamptz updated_at  timestamptz resolved_at }
     issue_updates{ bigint id PK  bigint issue_id FK  int corporator_id FK  text status  text remark  text rejection_reason  text_arr photos  text event  int from_ward_id FK  int to_ward_id FK  timestamptz created_at }
@@ -34,8 +34,8 @@ erDiagram
 | Table | Notes |
 | --- | --- |
 | `wards` | A **constituency**. `number` is its number, 1-29 (unique); `name` holds the areas it covers in English and `name_mr` in Marathi (see `server/db/constituencies.js`). |
-| `corporators` | **One active corporator per ward** (`ward_id` has a *partial* unique index `WHERE is_active` - migration 011 - not a plain UNIQUE, so a deactivated corporator's row can stay for history while a new one is created for the same constituency, per the "Manage roles" deactivate-then-replace flow). Username unique case-insensitively (`lower(username)` index, shared with `admins` only at the application level - see `services/roster.js`'s cross-table check). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
-| `admins` | Mayor/admin **and Mandal Adhyaksh** accounts - same shape, distinguished by `role` (`'admin'` or `'mandal_adhyaksh'`, migration 010). A Mandal Adhyaksh is session-role `admin` too (see `sessions.role` below); only `admins.role` plus the route-local `requireMayor` check in `routes/admin.js` tell the two apart. |
+| `corporators` | **At most one active corporator per ward** (`ward_id` has a *partial* unique index `WHERE is_active` - migration 011). `ward_id` is **nullable** (migration 013): a corporator account can exist unassigned, created on the Accounts page independently of any constituency, then assigned to one on Manage roles (`services/roster.js`'s `assignCorporator`) - assigning someone new there simply sets their `ward_id` and clears whoever held that ward before (freed, not deactivated). `first_name`/`last_name` (migration 012) are what the Accounts page edits; `name` is kept as a denormalised `first_name + last_name`, written by the application on every create/update, so every OTHER query in the app (issue "assigned to", update history "by", dashboards) keeps reading one plain name without knowing about first/last at all. Username unique case-insensitively (`lower(username)` index, shared with `admins` only at the application level - see `services/roster.js`'s cross-table check). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
+| `admins` | Mayor/admin **and Mandal Adhyaksh** accounts - same shape, distinguished by `role` (`'admin'` or `'mandal_adhyaksh'`, migration 010). `first_name`/`last_name`/`name` follow the same convention as `corporators` above. A Mandal Adhyaksh is session-role `admin` too (see `sessions.role` below); only `admins.role` plus the route-local `requireMayor` check in `routes/admin.js` tell the two apart. |
 | `admin_wards` | Which constituencies a Mandal Adhyaksh covers. `ward_id` is the **primary key** (one constituency has at most one Mandal Adhyaksh); `admin_id` is not unique (one Mandal Adhyaksh can cover many constituencies). Managed only through `services/roster.js`, Mayor/Admin only. |
 | `issues` | `title` is a one-line headline **generated from the description** (first ~80 characters, cut at a word boundary; `server/src/lib/title.js`) - the form doesn't collect one and any `title` a client sends is ignored. `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile - it is what the citizen portal (`citizens.phone`) matches against; there is no foreign key, since issues are filed before an account may ever exist. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
 | `issue_updates` | Append-only history. `event` is `update` (status/remark/photos) or `transfer` (with `from_ward_id` / `to_ward_id`). `rejection_reason` is set when a corporator rejects (required by the API; NULL on older rows, whose explanation is in `remark`); proof photos use `photos`. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |
@@ -105,20 +105,33 @@ endpoints for both roles; only the data returned differs.
 | `PUT /api/admin/notes/:id` | JSON `{ body, budget_amount? }` (empty budget clears it) → `{ note }`; `404` if it is not yours |
 | `DELETE /api/admin/notes/:id` | `204`; `404` if it is not yours |
 
-#### Roster (Mayor/Admin only - `403` for a Mandal Adhyaksh too, via the route-local `requireMayor` check)
+#### Accounts (Mayor/Admin only - `403` for a Mandal Adhyaksh too, via the route-local `requireMayor` check)
 
-Backs the **Manage roles** screen (`services/roster.js`). Usernames are checked for uniqueness across
+Backs the **Accounts** screen (`services/roster.js`'s `listAccounts`/`createAccount`/`updateAccount`/
+`deactivateAccount`). Every account, whatever table it actually lives in, looks the same on the wire:
+`{ id, role, first_name, last_name, username, is_active, ward?, ward_count? }` - `role` is
+`'corporator' | 'mandal_adhyaksh' | 'admin'`; `ward` (a corporator's current constituency, or `null`) and
+`ward_count` (a Mandal Adhyaksh's constituency count) are mutually exclusive with each other and absent for
+`admin`. **`id` is only unique within a role** - a corporator and an admin can share the same numeric id,
+since they live in different tables with their own sequences - so a client must always key on `(role, id)`
+together, e.g. `` `${role}-${id}` `` as a React list key. Usernames are checked for uniqueness across
 **both** `corporators` and `admins` (a `UNION` pre-check - each table's own unique index only covers itself).
 
 | Method & path | Body | Response |
 | --- | --- | --- |
-| `GET /api/admin/roster` | - | `{ wards: [{ id, number, name, name_mr, corporator, mandal_adhyaksh }], mandal_adhyaksh_list: [{ id, name, username, is_active, ward_count }] }` - `corporator`/`mandal_adhyaksh` are `null` when unassigned |
-| `POST /api/admin/roster/corporators` | `{ ward_id, name, username }` | `201 { corporator }`, password `corporator123`; `400` if the constituency already has an active corporator or the username is taken |
-| `PUT /api/admin/roster/corporators/:id` | `{ name, username }` | `200 { corporator }` - edits the **same account in place** (no password change, sessions untouched); `400` if the new username is taken by someone else, `404` if the id doesn't exist |
-| `PUT /api/admin/roster/corporators/:id/deactivate` | - | `{ corporator }`; frees the constituency for a replacement |
-| `POST /api/admin/roster/mandal-adhyaksh` | `{ name, username }` | `201 { mandal_adhyaksh }`, created unassigned, password `mandal12345` |
-| `PUT /api/admin/roster/mandal-adhyaksh/:id` | `{ name, username }` | `200 { mandal_adhyaksh }` - edits the same account in place; their `admin_wards` rows are untouched |
-| `PUT /api/admin/roster/mandal-adhyaksh/:id/deactivate` | - | `{ mandal_adhyaksh }`; ends their sessions, but leaves any `admin_wards` rows (a constituency with an inactive Mandal Adhyaksh reads as still-assigned in the roster until reassigned) |
+| `GET /api/admin/accounts` | - | `{ accounts: [...] }`, shape above, corporators then admins (admin role first within that group) |
+| `POST /api/admin/accounts` | `{ role: 'corporator' \| 'mandal_adhyaksh', first_name, last_name, username }` | `201 { account }`, created **unassigned** to any constituency - assign it on Manage roles below. Password `corporator123` / `mandal12345`. `role: 'admin'` is rejected (`400`) - creating a Mayor/Admin account is CLI-only, see the README's Known limitations. `400` if the username is taken |
+| `PUT /api/admin/accounts/:role/:id` | `{ first_name, last_name, username }` | `200 { account }` - edits the **same account in place** (no password change, sessions untouched, constituency assignment untouched); works for any role, including renaming the Mayor's own account. `400` if the new username is taken by someone else, `404` if the id/role pair doesn't exist |
+| `PUT /api/admin/accounts/:role/:id/deactivate` | - | `200 { account }` for `corporator`/`mandal_adhyaksh`; `400` for `role: 'admin'` (blocked - no self-lockout risk from this screen) |
+
+#### Roster (Mayor/Admin only - assignment only; accounts themselves are managed above)
+
+Backs the **Manage roles** grid (`services/roster.js`'s `getRoster`/`assignCorporator`/`assignMandalAdhyaksh`).
+
+| Method & path | Body | Response |
+| --- | --- | --- |
+| `GET /api/admin/roster` | - | `{ wards: [{ id, number, name, name_mr, corporator, mandal_adhyaksh }] }` - `corporator`/`mandal_adhyaksh` (each `{ id, name, username }`) are `null` when unassigned. Which accounts are *available* to assign comes from `GET /api/admin/accounts`, not from here |
+| `PUT /api/admin/roster/wards/:wardId/corporator` | `{ corporator_id: number \| null }` | `200 { ward, corporator }`; `null` clears it. Assigning an id **moves** that corporator here, freeing whoever covered this constituency before them (a corporator covers exactly one constituency at a time - unlike a Mandal Adhyaksh, this is never additive) |
 | `PUT /api/admin/roster/wards/:wardId/mandal-adhyaksh` | `{ admin_id: number \| null }` | `200 { ward, mandal_adhyaksh }`; `null` clears the constituency's assignment. One `admin_id` can be assigned to many constituencies by calling this once per constituency - the client's bulk-assign toolbar in `AdminRoles.jsx` calls this once per **selected** constituency (`Promise.allSettled`), which is what "select several rows, apply one Mandal Adhyaksh, save" resolves to on the wire |
 
 ### Citizen (`Authorization: Bearer <token>`, `role: "citizen"`)
@@ -152,7 +165,8 @@ falls back to the React app's `index.html`.
 | `/admin/issues` | `AdminIssues` (city-wide list; status/category/constituency/overdue filters from URL params) | admin, `adminRole="admin"` |
 | `/admin/issues/:id` | `AdminIssueDetail` (the exact record, read-only, with private notes on it) | admin, `adminRole="admin"` |
 | `/admin/notes` | `AdminNotes` (all my private notes, general or per issue) | admin, `adminRole="admin"` |
-| `/admin/roles` | `AdminRoles` (Manage roles: a grid, one row per constituency - corporator name/username editable in place, checkbox rows + a toolbar to bulk-assign a Mandal Adhyaksh to several constituencies at once) | admin, `adminRole="admin"` |
+| `/admin/accounts` | `AdminAccounts` (every account - corporator, Mandal Adhyaksh, admin - as one table: first/last name, username, role, constituency; create/edit/deactivate) | admin, `adminRole="admin"` |
+| `/admin/roles` | `AdminRoles` (Manage roles: a grid, one row per constituency - a corporator dropdown per row, checkbox rows + a toolbar to bulk-assign a Mandal Adhyaksh to several constituencies at once; people themselves come from Accounts) | admin, `adminRole="admin"` |
 | `/mandal`, `/mandal/issues`, `/mandal/issues/:id`, `/mandal/notes` | the **same** `AdminDashboard` / `AdminIssues` / `AdminIssueDetail` / `AdminNotes` components as `/admin/*`, mounted under a `PortalProvider` that points their internal links at `/mandal` instead - see [Component hierarchy](#component-hierarchy) | admin, `adminRole="mandal_adhyaksh"` |
 | `*` | `NotFound` | - |
 
@@ -208,7 +222,8 @@ main.jsx
             │   │   ├─ AdminIssues       (IssueListView scope="admin")
             │   │   ├─ AdminIssueDetail  (IssueDetails, CitizenContact, NotesPanel, IssueTimeline)
             │   │   ├─ AdminNotes        (NotesPanel)
-            │   │   └─ AdminRoles        (grid: CorporatorCell per row, checkbox + bulk-assign toolbar, MandalAccountRow list)
+            │   │   ├─ AdminAccounts     (AccountRow per account, role filter + search, add-account form)
+            │   │   └─ AdminRoles        (grid: CorporatorCell dropdown per row, checkbox + bulk-assign toolbar for Mandal Adhyaksh)
             │   ├─ ProtectedRoute role="admin" adminRole="mandal_adhyaksh"
             │   │   └─ PortalProvider basePath="/mandal"   (context: usePortal() - see below)
             │   │       ├─ AdminDashboard    (same component; scope banner lists the caller's constituencies)

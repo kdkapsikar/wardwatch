@@ -64,13 +64,20 @@ async function main() {
   if (password.length < 10) usage('password must be at least 10 characters');
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
+  // `name` stays in sync with first_name/last_name, same as the Accounts page - see services/roster.js.
+  // A CLI-supplied "Full Name" is split at its last space: "Asha Patil" -> "Asha" / "Patil"; a one-word
+  // name (no space) becomes first_name = the whole thing, last_name = ''.
+  const words = name.trim().split(/\s+/);
+  const lastName = words.length > 1 ? words.pop() : '';
+  const firstName = words.join(' ');
+
   try {
     if (role === 'admin') {
-      await query('INSERT INTO admins (name, username, password_hash) VALUES ($1, $2, $3)', [name, username, hash]);
+      await query('INSERT INTO admins (first_name, last_name, name, username, password_hash) VALUES ($1, $2, $3, $4, $5)', [firstName, lastName, name, username, hash]);
     } else {
       await query(
-        'INSERT INTO corporators (ward_id, name, username, password_hash) VALUES ($1, $2, $3, $4)',
-        [wardId, name, username, hash],
+        'INSERT INTO corporators (ward_id, first_name, last_name, name, username, password_hash) VALUES ($1, $2, $3, $4, $5, $6)',
+        [wardId, firstName, lastName, name, username, hash],
       );
     }
   } catch (err) {

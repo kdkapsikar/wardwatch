@@ -35,8 +35,8 @@ async function main() {
       else summary.wardsUpdated += 1;
 
       const renamed = await db.query(
-        `UPDATE corporators SET name = $2 WHERE ward_id = $1 AND name ~ '^Ward [0-9]+ Corporator$'`,
-        [wardId, `Constituency ${number} Corporator`],
+        `UPDATE corporators SET first_name = $2, last_name = $3, name = $4 WHERE ward_id = $1 AND name ~ '^Ward [0-9]+ Corporator$'`,
+        [wardId, `Constituency ${number}`, 'Corporator', `Constituency ${number} Corporator`],
       );
       summary.corporatorsRenamed += renamed.rowCount;
 
@@ -44,9 +44,9 @@ async function main() {
         const existing = await db.query('SELECT 1 FROM corporators WHERE ward_id = $1', [wardId]);
         if (existing.rowCount === 0) {
           const created = await db.query(
-            `INSERT INTO corporators (ward_id, name, username, password_hash) VALUES ($1, $2, $3, $4)
+            `INSERT INTO corporators (ward_id, first_name, last_name, name, username, password_hash) VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT DO NOTHING`,
-            [wardId, `Constituency ${number} Corporator`, `corp${number}`, hash],
+            [wardId, `Constituency ${number}`, 'Corporator', `Constituency ${number} Corporator`, `corp${number}`, hash],
           );
           if (created.rowCount) summary.corporatorsCreated += 1;
           else summary.skipped.push(`corp${number} (username already taken)`);

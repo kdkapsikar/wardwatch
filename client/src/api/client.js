@@ -110,13 +110,13 @@ export const api = {
   createNote: (body) => request('/admin/notes', { method: 'POST', json: body }),
   updateNote: (id, body) => request(`/admin/notes/${id}`, { method: 'PUT', json: body }),
   deleteNote: (id) => request(`/admin/notes/${id}`, { method: 'DELETE' }),
-  // roster: who covers which constituency (mayor/admin only)
+  // accounts: who exists - corporators and admins, whatever role (mayor/admin only)
+  getAccounts: () => request('/admin/accounts'),
+  createAccount: (body) => request('/admin/accounts', { method: 'POST', json: body }),
+  updateAccount: (role, id, body) => request(`/admin/accounts/${role}/${id}`, { method: 'PUT', json: body }),
+  deactivateAccount: (role, id) => request(`/admin/accounts/${role}/${id}/deactivate`, { method: 'PUT' }),
+  // roster: which constituency each corporator/Mandal Adhyaksh covers (mayor/admin only)
   getRoster: () => request('/admin/roster'),
-  createCorporator: (body) => request('/admin/roster/corporators', { method: 'POST', json: body }),
-  updateCorporator: (id, body) => request(`/admin/roster/corporators/${id}`, { method: 'PUT', json: body }),
-  deactivateCorporator: (id) => request(`/admin/roster/corporators/${id}/deactivate`, { method: 'PUT' }),
-  createMandalAdhyaksh: (body) => request('/admin/roster/mandal-adhyaksh', { method: 'POST', json: body }),
-  updateMandalAdhyaksh: (id, body) => request(`/admin/roster/mandal-adhyaksh/${id}`, { method: 'PUT', json: body }),
-  deactivateMandalAdhyaksh: (id) => request(`/admin/roster/mandal-adhyaksh/${id}/deactivate`, { method: 'PUT' }),
+  assignCorporator: (wardId, corporatorId) => request(`/admin/roster/wards/${wardId}/corporator`, { method: 'PUT', json: { corporator_id: corporatorId } }),
   assignMandalAdhyaksh: (wardId, adminId) => request(`/admin/roster/wards/${wardId}/mandal-adhyaksh`, { method: 'PUT', json: { admin_id: adminId } }),
 };

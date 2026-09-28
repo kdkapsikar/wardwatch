@@ -145,7 +145,7 @@ export const noteSchema = z.object({
   budget_amount: budgetAmount,
 });
 
-// Usernames created through the roster UI: same rule as `create-user.js` (stored lowercase).
+// Usernames created through the Accounts page: same rule as `create-user.js` (stored lowercase).
 const rosterUsername = z.preprocess(
   (v) => (typeof v === 'string' ? v.trim().toLowerCase() : ''),
   z
@@ -155,28 +155,39 @@ const rosterUsername = z.preprocess(
     .regex(/^[a-z0-9._-]+$/, 'Username can only contain letters, numbers, dots, underscores and hyphens'),
 );
 
-export const rosterCorporatorSchema = z.object({
-  ward_id: z.preprocess((v) => Number(v), z.number().int().positive('Select a valid constituency')),
-  name: text('Full name', { min: 2, max: 100 }),
+// Last name is optional (a one-word name is still a name); first name is not.
+const firstName = text('First name', { min: 1, max: 60 });
+const lastName = z.preprocess((v) => (typeof v === 'string' ? v.trim() : ''), z.string().max(60, 'Last name must be at most 60 characters'));
+
+// Creating an account on the Accounts page. Admin accounts are deliberately not creatable here - see
+// services/roster.js's createAccount - only from the CLI (scripts/create-user.js).
+export const accountCreateSchema = z.object({
+  role: z.enum(['corporator', 'mandal_adhyaksh'], { message: 'Choose a valid role' }),
+  first_name: firstName,
+  last_name: lastName,
   username: rosterUsername,
 });
 
-export const rosterMandalAdhyakshSchema = z.object({
-  name: text('Full name', { min: 2, max: 100 }),
-  username: rosterUsername,
-});
-
-// Editing an existing corporator/Mandal Adhyaksh's own details (name/username) - same account, no
-// ward_id (that constituency link is changed separately, via rosterAssignSchema below).
-export const rosterEditPersonSchema = z.object({
-  name: text('Full name', { min: 2, max: 100 }),
+// Editing an existing account's own details - same account and history, not a replacement. Which
+// constituency (if any) a corporator or Mandal Adhyaksh covers is changed separately, on Manage roles.
+export const accountEditSchema = z.object({
+  first_name: firstName,
+  last_name: lastName,
   username: rosterUsername,
 });
 
 // { admin_id: null } clears a constituency's Mandal Adhyaksh.
-export const rosterAssignSchema = z.object({
+export const rosterAssignMandalSchema = z.object({
   admin_id: z.preprocess(
     (v) => (v === null || v === '' || v === undefined ? null : Number(v)),
     z.number().int().positive('Choose a valid Mandal Adhyaksh').nullable(),
+  ),
+});
+
+// { corporator_id: null } clears a constituency's corporator.
+export const rosterAssignCorporatorSchema = z.object({
+  corporator_id: z.preprocess(
+    (v) => (v === null || v === '' || v === undefined ? null : Number(v)),
+    z.number().int().positive('Choose a valid corporator').nullable(),
   ),
 });

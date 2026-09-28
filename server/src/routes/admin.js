@@ -2,15 +2,15 @@ import { Router } from 'express';
 import { HttpError } from '../lib/httpError.js';
 import { normalizePublicId } from '../lib/ids.js';
 import {
-  adminListQuerySchema, noteSchema, parse,
-  rosterAssignSchema, rosterCorporatorSchema, rosterEditPersonSchema, rosterMandalAdhyakshSchema,
+  accountCreateSchema, accountEditSchema, adminListQuerySchema, noteSchema, parse,
+  rosterAssignCorporatorSchema, rosterAssignMandalSchema,
 } from '../lib/validation.js';
 import { requireRole } from '../middleware/auth.js';
 import { getIssue, listIssues } from '../services/issues.js';
 import { createNote, deleteNote, listNotes, updateNote } from '../services/notes.js';
 import {
-  assignMandalAdhyaksh, createCorporator, createMandalAdhyaksh,
-  deactivateCorporator, deactivateMandalAdhyaksh, getRoster, updateCorporator, updateMandalAdhyaksh,
+  assignCorporator, assignMandalAdhyaksh, createAccount,
+  deactivateAccount, getRoster, listAccounts, updateAccount,
 } from '../services/roster.js';
 import { getDashboard } from '../services/stats.js';
 
@@ -20,7 +20,8 @@ router.use(requireRole('admin'));
 // A Mandal Adhyaksh sees only their assigned constituencies; the mayor/admin sees the whole city.
 const wardScope = (req) => (req.auth.user.role === 'mandal_adhyaksh' ? req.auth.user.wards.map((w) => w.id) : null);
 
-// Managing who covers which constituency is the mayor/admin's job, not a Mandal Adhyaksh's own.
+// Managing accounts and who covers which constituency is the mayor/admin's job, not a Mandal
+// Adhyaksh's own.
 function requireMayor(req, _res, next) {
   if (req.auth.user.role !== 'admin') throw new HttpError(403, 'forbidden', 'You do not have access to this area');
   next();
@@ -85,53 +86,57 @@ router.delete('/notes/:noteId', async (req, res) => {
   res.status(204).end();
 });
 
-// ---- Roster: which corporator / Mandal Adhyaksh covers each constituency. Mayor/admin only - a ----
-// ---- Mandal Adhyaksh can see their own scoped dashboard above, but not manage anyone's roles.   ----
+// ---- Accounts: who exists (name, username, role). Mayor/admin only. ----
 
-// GET /api/admin/roster - the constituency-first list the "Manage roles" screen is built around
+router.param('role', (req, _res, next, value) => {
+  if (!['corporator', 'mandal_adhyaksh', 'admin'].includes(value)) return next(new HttpError(404, 'not_found', 'Account not found'));
+  req.accountRole = value;
+  return next();
+});
+
+// GET /api/admin/accounts - every corporator and admin account, whatever role it holds
+router.get('/accounts', requireMayor, async (req, res) => {
+  res.json(await listAccounts());
+});
+
+// POST /api/admin/accounts  { role: 'corporator'|'mandal_adhyaksh', first_name, last_name, username }
+router.post('/accounts', requireMayor, async (req, res) => {
+  const data = parse(accountCreateSchema, req.body ?? {});
+  res.status(201).json({ account: await createAccount(data) });
+});
+
+// PUT /api/admin/accounts/:role/:id  { first_name, last_name, username } - edits the same account in place
+router.put('/accounts/:role/:id', requireMayor, async (req, res) => {
+  const data = parse(accountEditSchema, req.body ?? {});
+  res.json({ account: await updateAccount(req.accountRole, req.params.id, data) });
+});
+
+// PUT /api/admin/accounts/:role/:id/deactivate
+router.put('/accounts/:role/:id/deactivate', requireMayor, async (req, res) => {
+  res.json({ account: await deactivateAccount(req.accountRole, req.params.id) });
+});
+
+// ---- Roster: which corporator / Mandal Adhyaksh covers each constituency - assignment only; ----
+// ---- accounts themselves are managed above. Mayor/admin only.                                ----
+
+// GET /api/admin/roster - the constituency-first list the "Manage roles" grid is built around
 router.get('/roster', requireMayor, async (req, res) => {
   res.json(await getRoster());
 });
 
-// POST /api/admin/roster/corporators  { ward_id, name, username }
-router.post('/roster/corporators', requireMayor, async (req, res) => {
-  const data = parse(rosterCorporatorSchema, req.body ?? {});
-  res.status(201).json({ corporator: await createCorporator(data) });
-});
-
-// PUT /api/admin/roster/corporators/:id  { name, username } - edits the same account in place
-router.put('/roster/corporators/:id', requireMayor, async (req, res) => {
-  const data = parse(rosterEditPersonSchema, req.body ?? {});
-  res.json({ corporator: await updateCorporator(req.params.id, data) });
-});
-
-// PUT /api/admin/roster/corporators/:id/deactivate
-router.put('/roster/corporators/:id/deactivate', requireMayor, async (req, res) => {
-  res.json({ corporator: await deactivateCorporator(req.params.id) });
-});
-
-// POST /api/admin/roster/mandal-adhyaksh  { name, username } - created unassigned; assign below
-router.post('/roster/mandal-adhyaksh', requireMayor, async (req, res) => {
-  const data = parse(rosterMandalAdhyakshSchema, req.body ?? {});
-  res.status(201).json({ mandal_adhyaksh: await createMandalAdhyaksh(data) });
-});
-
-// PUT /api/admin/roster/mandal-adhyaksh/:id  { name, username } - edits the same account in place
-router.put('/roster/mandal-adhyaksh/:id', requireMayor, async (req, res) => {
-  const data = parse(rosterEditPersonSchema, req.body ?? {});
-  res.json({ mandal_adhyaksh: await updateMandalAdhyaksh(req.params.id, data) });
-});
-
-// PUT /api/admin/roster/mandal-adhyaksh/:id/deactivate
-router.put('/roster/mandal-adhyaksh/:id/deactivate', requireMayor, async (req, res) => {
-  res.json({ mandal_adhyaksh: await deactivateMandalAdhyaksh(req.params.id) });
+// PUT /api/admin/roster/wards/:wardId/corporator  { corporator_id: number|null }
+router.put('/roster/wards/:wardId/corporator', requireMayor, async (req, res) => {
+  const wardId = Number(req.params.wardId);
+  if (!Number.isInteger(wardId) || wardId < 1) throw new HttpError(404, 'not_found', 'Constituency not found');
+  const { corporator_id: corporatorId } = parse(rosterAssignCorporatorSchema, req.body ?? {});
+  res.json(await assignCorporator(wardId, corporatorId));
 });
 
 // PUT /api/admin/roster/wards/:wardId/mandal-adhyaksh  { admin_id: number|null }
 router.put('/roster/wards/:wardId/mandal-adhyaksh', requireMayor, async (req, res) => {
   const wardId = Number(req.params.wardId);
   if (!Number.isInteger(wardId) || wardId < 1) throw new HttpError(404, 'not_found', 'Constituency not found');
-  const { admin_id: adminId } = parse(rosterAssignSchema, req.body ?? {});
+  const { admin_id: adminId } = parse(rosterAssignMandalSchema, req.body ?? {});
   res.json(await assignMandalAdhyaksh(wardId, adminId));
 });
 

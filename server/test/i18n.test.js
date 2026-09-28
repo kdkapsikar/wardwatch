@@ -114,7 +114,7 @@ describe('server messages', () => {
     // Not user-facing API messages: validation labels (used inside the patterns / "X is out of range"),
     // text stored in the database that the client translates separately, and server-side log/misc strings.
     const IGNORE = new Set([
-      'Full name', 'Description', 'Address / landmark', 'Username', 'Note', 'Remark', 'Rejection reason', 'Latitude', 'Longitude',
+      'Full name', 'First name', 'Description', 'Address / landmark', 'Username', 'Note', 'Remark', 'Rejection reason', 'Latitude', 'Longitude',
       'Citizen report', 'Issue received',
       // startup/config errors and internal errors: never shown to a user (unexpected errors reach the
       // client only as the generic "Something went wrong" message)

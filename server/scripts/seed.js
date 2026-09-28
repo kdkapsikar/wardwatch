@@ -32,7 +32,7 @@ async function main() {
   const corporatorHash = await bcrypt.hash(DEV_CORPORATOR_PASSWORD, BCRYPT_ROUNDS);
 
   await query(
-    `INSERT INTO admins (name, username, password_hash) VALUES ('Mayor Office', 'admin', $1)
+    `INSERT INTO admins (first_name, last_name, name, username, password_hash) VALUES ('Mayor', 'Office', 'Mayor Office', 'admin', $1)
      ON CONFLICT (lower(username)) DO NOTHING`,
     [adminHash],
   );
@@ -44,9 +44,9 @@ async function main() {
       [number, areas, areasMr],
     );
     await query(
-      `INSERT INTO corporators (ward_id, name, username, password_hash) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (ward_id) DO NOTHING`,
-      [ward.rows[0].id, `Constituency ${number} Corporator`, `corp${number}`, corporatorHash],
+      `INSERT INTO corporators (ward_id, first_name, last_name, name, username, password_hash) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (ward_id) WHERE is_active DO NOTHING`,
+      [ward.rows[0].id, `Constituency ${number}`, 'Corporator', `Constituency ${number} Corporator`, `corp${number}`, corporatorHash],
     );
   }
 

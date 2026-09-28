@@ -11,6 +11,7 @@ import Login from './pages/Login.jsx';
 import CorporatorDashboard from './pages/corporator/CorporatorDashboard.jsx';
 import CorporatorIssues from './pages/corporator/CorporatorIssues.jsx';
 import CorporatorIssueDetail from './pages/corporator/CorporatorIssueDetail.jsx';
+import AdminAccounts from './pages/admin/AdminAccounts.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import AdminIssueDetail from './pages/admin/AdminIssueDetail.jsx';
 import AdminIssues from './pages/admin/AdminIssues.jsx';
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="issues" element={<AdminIssues />} />
           <Route path="issues/:id" element={<AdminIssueDetail />} />
           <Route path="notes" element={<AdminNotes />} />
+          <Route path="accounts" element={<AdminAccounts />} />
           <Route path="roles" element={<AdminRoles />} />
         </Route>
 
