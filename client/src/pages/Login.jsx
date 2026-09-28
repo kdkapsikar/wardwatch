@@ -17,7 +17,7 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
 
   // Already signed in (or just became signed in): go back where we came from, else to the role's home.
-  if (auth) return <Navigate to={location.state?.from ?? homeFor(auth.role)} replace />;
+  if (auth) return <Navigate to={location.state?.from ?? homeFor(auth)} replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();

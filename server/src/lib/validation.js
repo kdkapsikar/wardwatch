@@ -144,3 +144,32 @@ export const noteSchema = z.object({
   body: text('Note', { min: 1, max: 2000 }),
   budget_amount: budgetAmount,
 });
+
+// Usernames created through the roster UI: same rule as `create-user.js` (stored lowercase).
+const rosterUsername = z.preprocess(
+  (v) => (typeof v === 'string' ? v.trim().toLowerCase() : ''),
+  z
+    .string()
+    .min(1, 'Username is required')
+    .max(100, 'Username must be at most 100 characters')
+    .regex(/^[a-z0-9._-]+$/, 'Username can only contain letters, numbers, dots, underscores and hyphens'),
+);
+
+export const rosterCorporatorSchema = z.object({
+  ward_id: z.preprocess((v) => Number(v), z.number().int().positive('Select a valid constituency')),
+  name: text('Full name', { min: 2, max: 100 }),
+  username: rosterUsername,
+});
+
+export const rosterMandalAdhyakshSchema = z.object({
+  name: text('Full name', { min: 2, max: 100 }),
+  username: rosterUsername,
+});
+
+// { admin_id: null } clears a constituency's Mandal Adhyaksh.
+export const rosterAssignSchema = z.object({
+  admin_id: z.preprocess(
+    (v) => (v === null || v === '' || v === undefined ? null : Number(v)),
+    z.number().int().positive('Choose a valid Mandal Adhyaksh').nullable(),
+  ),
+});

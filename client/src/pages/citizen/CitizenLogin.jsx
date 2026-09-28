@@ -22,7 +22,7 @@ export default function CitizenLogin() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (auth) return <Navigate to={location.state?.from ?? homeFor(auth.role)} replace />;
+  if (auth) return <Navigate to={location.state?.from ?? homeFor(auth)} replace />;
 
   async function handleRequest(event) {
     event.preventDefault();

@@ -11,7 +11,7 @@ const canonical = (id) => {
 };
 
 /** Jump straight to an issue record by its Issue ID (signed-in staff). The record page reports "not found". */
-export default function IssueIdSearch({ role }) {
+export default function IssueIdSearch({ basePath }) {
   const { t } = useT();
   const navigate = useNavigate();
   const [value, setValue] = useState('');
@@ -20,7 +20,7 @@ export default function IssueIdSearch({ role }) {
     event.preventDefault();
     const id = canonical(clean(value));
     if (!id) return;
-    navigate(`${role === 'admin' ? '/admin' : '/corporator'}/issues/${encodeURIComponent(id)}`);
+    navigate(`${basePath}/issues/${encodeURIComponent(id)}`);
     setValue('');
   }
 

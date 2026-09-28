@@ -110,4 +110,11 @@ export const api = {
   createNote: (body) => request('/admin/notes', { method: 'POST', json: body }),
   updateNote: (id, body) => request(`/admin/notes/${id}`, { method: 'PUT', json: body }),
   deleteNote: (id) => request(`/admin/notes/${id}`, { method: 'DELETE' }),
+  // roster: who covers which constituency (mayor/admin only)
+  getRoster: () => request('/admin/roster'),
+  createCorporator: (body) => request('/admin/roster/corporators', { method: 'POST', json: body }),
+  deactivateCorporator: (id) => request(`/admin/roster/corporators/${id}/deactivate`, { method: 'PUT' }),
+  createMandalAdhyaksh: (body) => request('/admin/roster/mandal-adhyaksh', { method: 'POST', json: body }),
+  deactivateMandalAdhyaksh: (id) => request(`/admin/roster/mandal-adhyaksh/${id}/deactivate`, { method: 'PUT' }),
+  assignMandalAdhyaksh: (wardId, adminId) => request(`/admin/roster/wards/${wardId}/mandal-adhyaksh`, { method: 'PUT', json: { admin_id: adminId } }),
 };

@@ -7,7 +7,8 @@
 > `wards.name`. Renaming the identifiers would be a pure refactor with no user-visible effect.
 
 Source of truth: [`server/db/migrations/`](../server/db/migrations). The five required tables plus
-`sessions` (server-side login sessions, used instead of JWTs), `admin_notes`, `photos` and `citizens`.
+`sessions` (server-side login sessions, used instead of JWTs), `admin_notes`, `photos`, `citizens` and
+`admin_wards` (which constituencies a Mandal Adhyaksh covers - see below).
 
 ```mermaid
 erDiagram
@@ -17,10 +18,13 @@ erDiagram
     issues ||--|{ issue_updates : "history"
     corporators ||--o{ issue_updates : "posts"
     citizens ..o{ issues : "citizen_phone (no FK)"
+    wards ||--o| admin_wards : "at most one"
+    admins ||--o{ admin_wards : "covers many"
 
     wards        { int id PK  int number UK  text name  text name_mr }
     corporators  { int id PK  int ward_id FK,UK  text name  text username UK  text password_hash  bool is_active }
-    admins       { int id PK  text name  text username UK  text password_hash  bool is_active }
+    admins       { int id PK  text name  text username UK  text password_hash  bool is_active  text role }
+    admin_wards  { int ward_id PK,FK  int admin_id FK }
     issues       { bigint id PK  text public_id UK  int ward_id FK  int corporator_id FK  text category  text title  text description  text address  float latitude  float longitude  text citizen_name  text citizen_phone  text_arr photos  text status  timestamptz consent_at  timestamptz created_at  timestamptz updated_at  timestamptz resolved_at }
     issue_updates{ bigint id PK  bigint issue_id FK  int corporator_id FK  text status  text remark  text rejection_reason  text_arr photos  text event  int from_ward_id FK  int to_ward_id FK  timestamptz created_at }
     sessions     { text token_hash PK  text role  int user_id  timestamptz expires_at }
@@ -30,8 +34,9 @@ erDiagram
 | Table | Notes |
 | --- | --- |
 | `wards` | A **constituency**. `number` is its number, 1-29 (unique); `name` holds the areas it covers in English and `name_mr` in Marathi (see `server/db/constituencies.js`). |
-| `corporators` | **One per ward** (`ward_id` is UNIQUE, i.e. one corporator per constituency). Username unique case-insensitively (`lower(username)` index). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
-| `admins` | Mayor / admin accounts, same shape as corporators minus the ward. |
+| `corporators` | **One active corporator per ward** (`ward_id` has a *partial* unique index `WHERE is_active` - migration 011 - not a plain UNIQUE, so a deactivated corporator's row can stay for history while a new one is created for the same constituency, per the "Manage roles" deactivate-then-replace flow). Username unique case-insensitively (`lower(username)` index, shared with `admins` only at the application level - see `services/roster.js`'s cross-table check). `is_active=false` blocks login and kills sessions; rows are never deleted so history stays attributed. |
+| `admins` | Mayor/admin **and Mandal Adhyaksh** accounts - same shape, distinguished by `role` (`'admin'` or `'mandal_adhyaksh'`, migration 010). A Mandal Adhyaksh is session-role `admin` too (see `sessions.role` below); only `admins.role` plus the route-local `requireMayor` check in `routes/admin.js` tell the two apart. |
+| `admin_wards` | Which constituencies a Mandal Adhyaksh covers. `ward_id` is the **primary key** (one constituency has at most one Mandal Adhyaksh); `admin_id` is not unique (one Mandal Adhyaksh can cover many constituencies). Managed only through `services/roster.js`, Mayor/Admin only. |
 | `issues` | `title` is a one-line headline **generated from the description** (first ~80 characters, cut at a word boundary; `server/src/lib/title.js`) - the form doesn't collect one and any `title` a client sends is ignored. `public_id` is the citizen-facing ID (`WW-` + 8 random chars from an alphabet without look-alikes). `corporator_id` is copied from the ward's active corporator at submission (NULL if none). `status` ∈ `submitted · acknowledged · in_progress · resolved · rejected`. `category` ∈ `roads · water · sanitation · streetlights · drainage · parks · other`. `resolved_at` is set when status becomes `resolved`, cleared if reopened. `photos` are the citizen's uploads (URL paths). `latitude`/`longitude` (WGS84, 6 decimals) are set from the map picker; nullable only for issues filed before migration 003, both-or-neither and range-checked by `CHECK`s. `citizen_phone` is the normalised 10-digit Indian mobile - it is what the citizen portal (`citizens.phone`) matches against; there is no foreign key, since issues are filed before an account may ever exist. `consent_at` is when the citizen ticked the declaration (NULL only for issues filed before migration 004). |
 | `issue_updates` | Append-only history. `event` is `update` (status/remark/photos) or `transfer` (with `from_ward_id` / `to_ward_id`). `rejection_reason` is set when a corporator rejects (required by the API; NULL on older rows, whose explanation is in `remark`); proof photos use `photos`. `status` is the issue status **after** the update, so the timeline can be rendered without diffing. Row #1 is written on submission (`corporator_id` NULL = citizen). Corporator rows can carry a remark and/or photos, with or without a status change. |
 | `admin_notes` | **Private** mayor/admin notes: `admin_id` (owner), optional `issue_id`, `body`, optional `budget_amount` (₹, `NUMERIC(14,2)`). Every query filters on the caller's `admin_id` (see `services/notes.js`), so a note is invisible to every other user. Deleting an issue keeps its notes (`issue_id` becomes NULL). |
@@ -68,7 +73,7 @@ All JSON under `/api`. Errors always look like
 
 | Method & path | Body | Response |
 | --- | --- | --- |
-| `POST /api/auth/login` | `{ username, password }` | `{ token, auth: { role: "corporator"\|"admin", user: { id, name, username, ward? } } }` · `401` generic error. One endpoint for both roles: the role is whichever table holds the account (if a username exists in both, the password decides). |
+| `POST /api/auth/login` | `{ username, password }` | `{ token, auth: { role: "corporator"\|"admin", user: { id, name, username, ward?, role?, wards? } } }` · `401` generic error. One endpoint for both roles: the role is whichever table holds the account (if a username exists in both, the password decides). For `role: "admin"`, `user.role` is `"admin"` (Mayor - sees every constituency) or `"mandal_adhyaksh"` (`user.wards` lists their assigned constituencies, `{ id, number, name, name_mr }[]`, possibly empty). |
 | `GET /api/auth/me` | - | `{ auth: {...} }` or `{ auth: null }` |
 | `POST /api/auth/logout` | - (bearer token) | `204`; the session row is deleted, so the token stops working immediately |
 
@@ -83,17 +88,36 @@ All JSON under `/api`. Errors always look like
 | `POST /api/corporator/issues/:publicId/updates` | multipart: `status?, remark?, rejection_reason?, photos[]` | `201 { issue }` (updated). Needs a status change, remark or photo. **Remark is optional.** Changing the status to `rejected` **requires `rejection_reason`** (5-500 chars); photos then act as proof |
 | `POST /api/corporator/issues/:publicId/transfer` | JSON `{ ward_id, note? }` | `200 { transferred_to: { number, name } }`. Only open issues; target must differ from the current constituency and have an active corporator. The issue restarts as `submitted` for the new corporator; `404` for the sender afterwards |
 
-### Admin (`403` for other roles)
+### Admin (`403` for other roles; a Mandal Adhyaksh is an admin too, see below)
+
+City-wide for the Mayor/Admin; scoped to only the caller's assigned constituencies for a Mandal Adhyaksh
+(`wardScope(req)` in `routes/admin.js` → `wardIds` in `services/stats.js` / `services/issues.js` - `null` for
+the Mayor, an array, possibly empty, for a Mandal Adhyaksh). The three endpoints below are the same
+endpoints for both roles; only the data returned differs.
 
 | Method & path | Response |
 | --- | --- |
 | `GET /api/admin/dashboard` | `{ totals, wards[], corporators[], by_category[], my_notes, overdue_days, generated_at }` - each block has `total, submitted, acknowledged, in_progress, resolved, rejected, open, overdue, avg_resolution_hours, resolution_rate` (`by_category[]` = `{ category, total, open, resolved, rejected }`, feeding the pie chart) |
-| `GET /api/admin/issues` | City-wide list, same filters as the corporator inbox plus `ward=<number>`: `?status=open\|...\|all&category=&ward=&overdue=1&page=` → `{ issues[] (with constituency + corporator_name), total, counts }`. The pie chart's drill-down target |
-| `GET /api/admin/issues/:publicId` | The full record, read-only: everything corporators see plus `assigned_to`; `404` if unknown |
+| `GET /api/admin/issues` | List, same filters as the corporator inbox plus `ward=<number>`: `?status=open\|...\|all&category=&ward=&overdue=1&page=` → `{ issues[] (with constituency + corporator_name), total, counts }`. The pie chart's drill-down target |
+| `GET /api/admin/issues/:publicId` | The full record, read-only: everything corporators see plus `assigned_to`; `404` if unknown **or outside the caller's assigned constituencies** (a Mandal Adhyaksh cannot bypass scoping by ID) |
 | `GET /api/admin/notes[?issue=<publicId>]` | The caller's **own** notes (newest first) + `{ count, budget_total }` |
 | `POST /api/admin/notes` | JSON `{ body, budget_amount?, issue? }` → `201 { note }`. `budget_amount` accepts `125000`, `"1,25,000.50"`, `"₹ 40,000"`; empty/null = none |
 | `PUT /api/admin/notes/:id` | JSON `{ body, budget_amount? }` (empty budget clears it) → `{ note }`; `404` if it is not yours |
 | `DELETE /api/admin/notes/:id` | `204`; `404` if it is not yours |
+
+#### Roster (Mayor/Admin only - `403` for a Mandal Adhyaksh too, via the route-local `requireMayor` check)
+
+Backs the **Manage roles** screen (`services/roster.js`). Usernames are checked for uniqueness across
+**both** `corporators` and `admins` (a `UNION` pre-check - each table's own unique index only covers itself).
+
+| Method & path | Body | Response |
+| --- | --- | --- |
+| `GET /api/admin/roster` | - | `{ wards: [{ id, number, name, name_mr, corporator, mandal_adhyaksh }], mandal_adhyaksh_list: [{ id, name, username, is_active, ward_count }] }` - `corporator`/`mandal_adhyaksh` are `null` when unassigned |
+| `POST /api/admin/roster/corporators` | `{ ward_id, name, username }` | `201 { corporator }`, password `corporator123`; `400` if the constituency already has an active corporator or the username is taken |
+| `PUT /api/admin/roster/corporators/:id/deactivate` | - | `{ corporator }`; frees the constituency for a replacement |
+| `POST /api/admin/roster/mandal-adhyaksh` | `{ name, username }` | `201 { mandal_adhyaksh }`, created unassigned, password `mandal12345` |
+| `PUT /api/admin/roster/mandal-adhyaksh/:id/deactivate` | - | `{ mandal_adhyaksh }`; ends their sessions, but leaves any `admin_wards` rows (a constituency with an inactive Mandal Adhyaksh reads as still-assigned in the roster until reassigned) |
+| `PUT /api/admin/roster/wards/:wardId/mandal-adhyaksh` | `{ admin_id: number \| null }` | `200 { ward, mandal_adhyaksh }`; `null` clears the constituency's assignment. One `admin_id` can be assigned to many constituencies by calling this once per constituency |
 
 ### Citizen (`Authorization: Bearer <token>`, `role: "citizen"`)
 
@@ -122,14 +146,20 @@ falls back to the React app's `index.html`.
 | `/corporator` | `CorporatorDashboard` (own numbers; every figure links to a filtered list) | corporator |
 | `/corporator/issues` | `CorporatorIssues` (status chips + category/overdue filter chips, from URL params; paged) | corporator |
 | `/corporator/issues/:id` | `CorporatorIssueDetail` (details, status buttons + rejection panel, transfer, history) | corporator |
-| `/admin` | `AdminDashboard` (stat cards, category pie chart, notes summary, constituency + corporator tables) | admin |
-| `/admin/issues` | `AdminIssues` (city-wide list; status/category/constituency/overdue filters from URL params) | admin |
-| `/admin/issues/:id` | `AdminIssueDetail` (the exact record, read-only, with private notes on it) | admin |
-| `/admin/notes` | `AdminNotes` (all my private notes, general or per issue) | admin |
+| `/admin` | `AdminDashboard` (stat cards, category pie chart, notes summary, constituency + corporator tables) | admin, `adminRole="admin"` |
+| `/admin/issues` | `AdminIssues` (city-wide list; status/category/constituency/overdue filters from URL params) | admin, `adminRole="admin"` |
+| `/admin/issues/:id` | `AdminIssueDetail` (the exact record, read-only, with private notes on it) | admin, `adminRole="admin"` |
+| `/admin/notes` | `AdminNotes` (all my private notes, general or per issue) | admin, `adminRole="admin"` |
+| `/admin/roles` | `AdminRoles` (Manage roles: pick a constituency, see/edit its corporator and Mandal Adhyaksh, prepopulated; full roster table) | admin, `adminRole="admin"` |
+| `/mandal`, `/mandal/issues`, `/mandal/issues/:id`, `/mandal/notes` | the **same** `AdminDashboard` / `AdminIssues` / `AdminIssueDetail` / `AdminNotes` components as `/admin/*`, mounted under a `PortalProvider` that points their internal links at `/mandal` instead - see [Component hierarchy](#component-hierarchy) | admin, `adminRole="mandal_adhyaksh"` |
 | `*` | `NotFound` | - |
 
 `ProtectedRoute` sends signed-out visitors to `/login` (`/my/login` for `role="citizen"`; and back
-afterwards), and signed-in users of the other role to their own home.
+afterwards), and signed-in users of the other role to their own home. Its optional `adminRole` prop further
+gates the shared `role="admin"` session by the account's sub-role (`auth.user.role`), redirecting a
+mismatch (e.g. a Mandal Adhyaksh hitting `/admin/roles`, or the Mayor hitting `/mandal`) to their own home
+via `homeFor(auth)` (`lib/routes.js`), which now inspects `auth.user.role` for an admin session, not just
+`auth.role`.
 
 ### Component hierarchy
 
@@ -171,14 +201,26 @@ main.jsx
             │   │       ├─ UpdateForm    (StatusButtons, rejection reason + PhotoUploader proof, FormField)
             │   │       ├─ TransferPanel (FormField, two-step confirm)
             │   │       └─ IssueTimeline (rejection reasons, transfer events)
-            │   ├─ ProtectedRoute role="admin"
+            │   ├─ ProtectedRoute role="admin" adminRole="admin"   (Mayor/Admin only)
             │   │   ├─ AdminDashboard    (StatCard links, PieChart, notes summary card, WardBar per ward, performance table)
             │   │   ├─ AdminIssues       (IssueListView scope="admin")
             │   │   ├─ AdminIssueDetail  (IssueDetails, CitizenContact, NotesPanel, IssueTimeline)
-            │   │   └─ AdminNotes        (NotesPanel)
+            │   │   ├─ AdminNotes        (NotesPanel)
+            │   │   └─ AdminRoles        (constituency picker, CorporatorPanel, MandalPanel, RosterTable)
+            │   ├─ ProtectedRoute role="admin" adminRole="mandal_adhyaksh"
+            │   │   └─ PortalProvider basePath="/mandal"   (context: usePortal() - see below)
+            │   │       ├─ AdminDashboard    (same component; scope banner lists the caller's constituencies)
+            │   │       ├─ AdminIssues
+            │   │       ├─ AdminIssueDetail
+            │   │       └─ AdminNotes
             │   └─ NotFound
             └─ Footer
 ```
+
+`PortalContext` (`context/PortalContext.jsx`) supplies `{ basePath }` (default `/admin`) so the four shared
+admin pages build their internal links (`${basePath}/issues`, `${basePath}/notes`, ...) without prop-drilling
+or a duplicate component tree for the Mandal Adhyaksh portal - see `IssueListView.jsx`, `AdminDashboard.jsx`,
+`AdminIssueDetail.jsx`, `Header.jsx`.
 
 ### Frontend conventions
 

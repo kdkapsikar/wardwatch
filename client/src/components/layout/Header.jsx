@@ -18,6 +18,13 @@ export default function Header() {
     navigate('/');
   }
 
+  // The mayor/admin and a Mandal Adhyaksh share the same session role ("admin") and the same page
+  // components, just mounted under two different URL prefixes - see App.jsx and PortalContext.
+  const isStaff = auth?.role === 'corporator' || auth?.role === 'admin';
+  const isMandal = auth?.role === 'admin' && auth.user.role === 'mandal_adhyaksh';
+  const adminBase = isMandal ? '/mandal' : '/admin';
+  const staffBase = auth?.role === 'corporator' ? '/corporator' : adminBase;
+
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
@@ -35,13 +42,12 @@ export default function Header() {
           {auth ? (
             <>
               {auth.role === 'citizen' && <NavLink to="/my" end className={navClass}>{t('nav.myIssues')}</NavLink>}
-              {auth.role !== 'citizen' && (
-                <NavLink to={auth.role === 'admin' ? '/admin' : '/corporator'} end className={navClass}>{t('nav.dashboard')}</NavLink>
-              )}
-              {auth.role === 'corporator' && <NavLink to="/corporator/issues" className={navClass}>{t('nav.issues')}</NavLink>}
-              {auth.role === 'admin' && <NavLink to="/admin/issues" className={navClass}>{t('nav.issues')}</NavLink>}
-              {auth.role === 'admin' && <NavLink to="/admin/notes" className={navClass}>{t('nav.notes')}</NavLink>}
-              {(auth.role === 'corporator' || auth.role === 'admin') && <IssueIdSearch role={auth.role} />}
+              {isStaff && <NavLink to={staffBase} end className={navClass}>{t('nav.dashboard')}</NavLink>}
+              {isStaff && <NavLink to={`${staffBase}/issues`} className={navClass}>{t('nav.issues')}</NavLink>}
+              {auth.role === 'admin' && <NavLink to={`${adminBase}/notes`} className={navClass}>{t('nav.notes')}</NavLink>}
+              {/* Managing who covers which constituency is the mayor/admin's job, not a Mandal Adhyaksh's own. */}
+              {auth.role === 'admin' && !isMandal && <NavLink to="/admin/roles" className={navClass}>{t('nav.manageRoles')}</NavLink>}
+              {isStaff && <IssueIdSearch basePath={staffBase} />}
               <button
                 type="button"
                 onClick={handleLogout}

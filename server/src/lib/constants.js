@@ -12,4 +12,8 @@ export const OPEN_STATUSES = ['submitted', 'acknowledged', 'in_progress'];
 
 export const CATEGORIES = ['roads', 'water', 'sanitation', 'streetlights', 'drainage', 'parks', 'other'];
 
+// 'admin' = the mayor's office, sees every constituency. 'mandal_adhyaksh' sees only the
+// constituencies assigned to them in admin_wards - see services/stats.js and services/roster.js.
+export const ADMIN_ROLES = ['admin', 'mandal_adhyaksh'];
+
 export const BCRYPT_ROUNDS = 12;

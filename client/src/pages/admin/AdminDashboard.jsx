@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { usePortal } from '../../context/PortalContext.jsx';
 import { useT } from '../../i18n/LanguageContext.jsx';
 import Alert from '../../components/ui/Alert.jsx';
 import Spinner from '../../components/ui/Spinner.jsx';
@@ -35,9 +36,11 @@ const td = 'px-3 py-2.5 text-sm tabular-nums';
 
 export default function AdminDashboard() {
   const { auth } = useAuth();
+  const { basePath } = usePortal();
   const { t, statusLabel, categoryLabel, wardName, personName } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const isMandal = auth.user.role === 'mandal_adhyaksh';
 
   useEffect(() => {
     api.getDashboard().then(setData).catch((e) => setError(e.message));
@@ -55,7 +58,7 @@ export default function AdminDashboard() {
     label: categoryLabel(c.key),
     value: counts[c.key],
     color: c.color,
-    to: `/admin/issues?category=${c.key}&status=all`,
+    to: `${basePath}/issues?category=${c.key}&status=all`,
   }));
 
   return (
@@ -63,7 +66,13 @@ export default function AdminDashboard() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="text-sm font-medium text-brand-700">{t('dash.welcome', { name: personName(auth.user.name) })}</p>
-          <h1 className="text-2xl font-bold">{t('admin.dash.title')}</h1>
+          <h1 className="text-2xl font-bold">{t(isMandal ? 'admin.dash.titleMandal' : 'admin.dash.title')}</h1>
+          {/* A Mandal Adhyaksh's scope, so it's never ambiguous which constituencies this dashboard covers. */}
+          {isMandal && (
+            <p className="mt-1 text-sm text-slate-600">
+              {auth.user.wards.map((w) => t('list.constituencyChip', { n: w.number })).join(', ')}
+            </p>
+          )}
         </div>
         <p className="text-xs text-slate-500">{t('admin.dash.asOf', { when: formatDateTime(data.generated_at) })}</p>
       </div>
@@ -71,18 +80,18 @@ export default function AdminDashboard() {
       {/* Total, then the exact four statuses a corporator can set - same set, same order, same
           labels as the by-constituency bars below and the corporator's own dashboard. */}
       <section aria-label={t('dash.summary')} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <StatCard label={t('admin.dash.total')} value={totals.total} to="/admin/issues?status=all" hint={totals.unassigned ? t('admin.dash.unassigned', { n: totals.unassigned }) : undefined} />
-        <StatCard label={statusLabel('acknowledged')} value={totals.acknowledged} to="/admin/issues?status=acknowledged" tone="text-sky-700" />
-        <StatCard label={statusLabel('in_progress')} value={totals.in_progress} to="/admin/issues?status=in_progress" tone="text-amber-600" />
-        <StatCard label={t('dash.resolved')} value={totals.resolved} to="/admin/issues?status=resolved" tone="text-emerald-700" />
-        <StatCard label={t('dash.rejected')} value={totals.rejected} to="/admin/issues?status=rejected" tone="text-rose-700" />
+        <StatCard label={t('admin.dash.total')} value={totals.total} to={`${basePath}/issues?status=all`} hint={totals.unassigned ? t('admin.dash.unassigned', { n: totals.unassigned }) : undefined} />
+        <StatCard label={statusLabel('acknowledged')} value={totals.acknowledged} to={`${basePath}/issues?status=acknowledged`} tone="text-sky-700" />
+        <StatCard label={statusLabel('in_progress')} value={totals.in_progress} to={`${basePath}/issues?status=in_progress`} tone="text-amber-600" />
+        <StatCard label={t('dash.resolved')} value={totals.resolved} to={`${basePath}/issues?status=resolved`} tone="text-emerald-700" />
+        <StatCard label={t('dash.rejected')} value={totals.rejected} to={`${basePath}/issues?status=rejected`} tone="text-rose-700" />
       </section>
 
       <section aria-label={t('dash.performance')} className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatCard
           label={t('dash.overdue')}
           value={totals.overdue}
-          to="/admin/issues?status=open&overdue=1"
+          to={`${basePath}/issues?status=open&overdue=1`}
           hint={t('dash.overdueHint', { days: data.overdue_days })}
           tone={totals.overdue ? 'text-amber-700' : undefined}
         />
@@ -103,7 +112,7 @@ export default function AdminDashboard() {
       </section>
 
       <Link
-        to="/admin/notes"
+        to={`${basePath}/notes`}
         className="card flex flex-wrap items-center justify-between gap-3 p-4 transition hover:border-brand-600 hover:shadow sm:px-5"
       >
         <div>
@@ -141,7 +150,7 @@ export default function AdminDashboard() {
               {wards.map((w) => (
                 <tr key={w.ward_id}>
                   <td className={`${td} font-medium`}>
-                    <Link to={`/admin/issues?ward=${w.ward_number}&status=all`} className="hover:text-brand-700 hover:underline">{t('list.constituencyChip', { n: w.ward_number })}</Link>
+                    <Link to={`${basePath}/issues?ward=${w.ward_number}&status=all`} className="hover:text-brand-700 hover:underline">{t('list.constituencyChip', { n: w.ward_number })}</Link>
                     <span className="mt-0.5 block max-w-md text-xs font-normal leading-snug text-slate-500">{wardName({ name: w.ward_name, name_mr: w.ward_name_mr })}</span>
                   </td>
                   <td className={td}><WardBar ward={w} max={maxWard} /></td>

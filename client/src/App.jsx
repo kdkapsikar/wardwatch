@@ -1,6 +1,7 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import Layout from './components/layout/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import { PortalProvider } from './context/PortalContext.jsx';
 import Home from './pages/Home.jsx';
 import ReportIssue from './pages/ReportIssue.jsx';
 import IssueSubmitted from './pages/IssueSubmitted.jsx';
@@ -14,9 +15,22 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import AdminIssueDetail from './pages/admin/AdminIssueDetail.jsx';
 import AdminIssues from './pages/admin/AdminIssues.jsx';
 import AdminNotes from './pages/admin/AdminNotes.jsx';
+import AdminRoles from './pages/admin/AdminRoles.jsx';
 import CitizenLogin from './pages/citizen/CitizenLogin.jsx';
 import CitizenIssues from './pages/citizen/CitizenIssues.jsx';
 import CitizenIssueDetail from './pages/citizen/CitizenIssueDetail.jsx';
+
+// The Mandal Adhyaksh portal reuses every admin page component untouched - the server already scopes
+// their data to their assigned constituencies. This just points those components' internal links at
+// `/mandal` instead of `/admin` - see PortalContext.
+const MANDAL_PORTAL = { basePath: '/mandal' };
+function MandalPortal() {
+  return (
+    <PortalProvider value={MANDAL_PORTAL}>
+      <Outlet />
+    </PortalProvider>
+  );
+}
 
 export default function App() {
   return (
@@ -48,12 +62,24 @@ export default function App() {
           <Route path="issues/:id" element={<CorporatorIssueDetail />} />
         </Route>
 
-        {/* Mayor / Admin */}
-        <Route path="admin" element={<ProtectedRoute role="admin" />}>
+        {/* Mayor / Admin: city-wide, plus who covers which constituency (roles) - not a Mandal Adhyaksh's own. */}
+        <Route path="admin" element={<ProtectedRoute role="admin" adminRole="admin" />}>
           <Route index element={<AdminDashboard />} />
           <Route path="issues" element={<AdminIssues />} />
           <Route path="issues/:id" element={<AdminIssueDetail />} />
           <Route path="notes" element={<AdminNotes />} />
+          <Route path="roles" element={<AdminRoles />} />
+        </Route>
+
+        {/* Mandal Adhyaksh: the same dashboard/issues/notes pages, scoped by the server to whichever
+            constituencies the mayor/admin assigned them in Manage roles. */}
+        <Route path="mandal" element={<ProtectedRoute role="admin" adminRole="mandal_adhyaksh" />}>
+          <Route element={<MandalPortal />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="issues" element={<AdminIssues />} />
+            <Route path="issues/:id" element={<AdminIssueDetail />} />
+            <Route path="notes" element={<AdminNotes />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<NotFound />} />

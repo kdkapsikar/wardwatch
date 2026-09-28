@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { usePortal } from '../context/PortalContext.jsx';
 import { useT } from '../i18n/LanguageContext.jsx';
 import Alert from './ui/Alert.jsx';
 import Spinner from './ui/Spinner.jsx';
@@ -29,8 +30,9 @@ const CHIPS = [
  */
 export default function IssueListView({ scope, title, subtitle }) {
   const admin = scope === 'admin';
+  const { basePath } = usePortal();
   const { t, categoryLabel, personName } = useT();
-  const base = admin ? '/admin/issues' : '/corporator/issues';
+  const base = admin ? `${basePath}/issues` : '/corporator/issues';
   const location = useLocation();
   const [params, setParams] = useSearchParams();
 

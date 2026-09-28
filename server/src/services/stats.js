@@ -25,19 +25,31 @@ export const withRate = (row) => {
   return { ...row, resolution_rate: denominator > 0 ? Math.round((row.resolved / denominator) * 1000) / 10 : null };
 };
 
-export async function getDashboard(adminId) {
-  const params = [config.overdueDays];
+/**
+ * `wardIds`: null for the mayor/admin (sees every constituency); an array of ward ids to scope a
+ * Mandal Adhyaksh to only their assigned constituencies. Every query below adds the same ward
+ * filter (each against its own bind-parameter list), so the two roles share one dashboard - see
+ * routes/admin.js.
+ */
+export async function getDashboard(adminId, wardIds = null) {
+  const aggParams = [config.overdueDays, ...(wardIds ? [wardIds] : [])];
+  const issuesWhere = wardIds ? 'WHERE i.ward_id = ANY($2)' : '';
+  const wardsWhere = wardIds ? 'WHERE w.id = ANY($2)' : '';
+  const soloParams = wardIds ? [wardIds] : [];
+  const soloWhere = wardIds ? 'AND i.ward_id = ANY($1)' : '';
+
   const [totals, wards, corporators, unassigned, byCategory, myNotes] = await Promise.all([
-    query(`SELECT ${AGG} FROM issues i`, params),
+    query(`SELECT ${AGG} FROM issues i ${issuesWhere}`, aggParams),
     query(
       `SELECT w.id AS ward_id, w.number AS ward_number, w.name AS ward_name, w.name_mr AS ward_name_mr,
               c.name AS corporator_name, ${AGG}
          FROM wards w
          LEFT JOIN corporators c ON c.ward_id = w.id
          LEFT JOIN issues i      ON i.ward_id = w.id
+         ${wardsWhere}
         GROUP BY w.id, c.name
         ORDER BY w.number`,
-      params,
+      aggParams,
     ),
     query(
       `SELECT c.id AS corporator_id, c.name, c.is_active,
@@ -45,18 +57,20 @@ export async function getDashboard(adminId) {
          FROM corporators c
          JOIN wards w        ON w.id = c.ward_id
          LEFT JOIN issues i  ON i.corporator_id = c.id
+         ${wardsWhere}
         GROUP BY c.id, w.id
         ORDER BY w.number`,
-      params,
+      aggParams,
     ),
-    query('SELECT count(*)::int AS n FROM issues WHERE corporator_id IS NULL'),
+    query(`SELECT count(*)::int AS n FROM issues i WHERE corporator_id IS NULL ${soloWhere}`, soloParams),
     query(
       `SELECT i.category,
               count(*)::int AS total,
               count(*) FILTER (WHERE i.status IN ('submitted','acknowledged','in_progress'))::int AS open,
               count(*) FILTER (WHERE i.status = 'resolved')::int AS resolved,
               count(*) FILTER (WHERE i.status = 'rejected')::int AS rejected
-         FROM issues i GROUP BY i.category ORDER BY total DESC, i.category`,
+         FROM issues i ${issuesWhere.replace('$2', '$1')} GROUP BY i.category ORDER BY total DESC, i.category`,
+      soloParams,
     ),
     notesSummary(adminId), // the requesting admin's OWN notes only
   ]);

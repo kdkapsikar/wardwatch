@@ -74,7 +74,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  await query('TRUNCATE photos, issue_updates, issues, sessions, citizens, corporators, admins, wards RESTART IDENTITY CASCADE');
+  await query('TRUNCATE photos, issue_updates, issues, sessions, citizens, corporators, admin_wards, admins, wards RESTART IDENTITY CASCADE');
   const hash = await bcrypt.hash('correct-horse-1', 4);
   const w1 = (await query("INSERT INTO wards (number, name) VALUES (1, 'Ward One') RETURNING id")).rows[0].id;
   const w2 = (await query("INSERT INTO wards (number, name) VALUES (2, 'Ward Two') RETURNING id")).rows[0].id;
@@ -928,6 +928,192 @@ describe('admin dashboard', () => {
     const p2 = body.corporators.find((x) => x.name === 'Corp Two');
     assert.equal(p2.resolution_rate, 0);
     assert.equal(body.corporators.length, 2);
+  });
+});
+
+describe('mandal adhyaksh: scoped dashboards/issues, and roster management', () => {
+  const asAdmin = async (username = 'admin') => {
+    const api = client();
+    const res = await api('POST', '/api/auth/login', { json: { username, password: 'correct-horse-1' } });
+    assert.equal(res.status, 200, `login ${username}`);
+    return api;
+  };
+  const fileIssue = async (wardId, extra = {}) =>
+    (await client()('POST', '/api/issues', { form: issueForm({ ward_id: String(wardId), ...extra }) })).body.issue_id;
+  const resolve = async (issueId, username = 'corp1') => {
+    const corp = client();
+    await corp('POST', '/api/auth/login', { json: { username, password: 'correct-horse-1' } });
+    const form = new FormData(); form.append('status', 'resolved');
+    return corp('POST', `/api/corporator/issues/${issueId}/updates`, { form });
+  };
+  const createMandal = async (mayor, name = 'Mandal One', username = 'mandal1') => {
+    const res = await mayor('POST', '/api/admin/roster/mandal-adhyaksh', { json: { name, username } });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    return res.body.mandal_adhyaksh;
+  };
+  const assign = (mayor, wardId, adminId) => mayor('PUT', `/api/admin/roster/wards/${wardId}/mandal-adhyaksh`, { json: { admin_id: adminId } });
+
+  test('roster: create + assign a Mandal Adhyaksh to multiple constituencies; reflected in getRoster', async () => {
+    const mayor = await asAdmin();
+    const ma = await createMandal(mayor);
+    assert.equal(ma.ward_count, 0);
+
+    const assign1 = await assign(mayor, ctx.ward1, ma.id);
+    assert.equal(assign1.status, 200);
+    assert.equal(assign1.body.mandal_adhyaksh.id, ma.id);
+    assert.equal(assign1.body.ward.number, 1);
+    const assign2 = await assign(mayor, ctx.ward2, ma.id);
+    assert.equal(assign2.status, 200);
+
+    const roster = (await mayor('GET', '/api/admin/roster')).body;
+    assert.equal(roster.wards.find((w) => w.number === 1).mandal_adhyaksh.id, ma.id);
+    assert.equal(roster.wards.find((w) => w.number === 2).mandal_adhyaksh.id, ma.id);
+    assert.equal(roster.wards.find((w) => w.number === 3).mandal_adhyaksh, null);
+    assert.equal(roster.mandal_adhyaksh_list.find((m) => m.id === ma.id).ward_count, 2);
+
+    // reassigning ward1 to a second Mandal Adhyaksh moves it away from the first (one per constituency)
+    const ma2 = await createMandal(mayor, 'Mandal Two', 'mandal2');
+    await assign(mayor, ctx.ward1, ma2.id);
+    const after = (await mayor('GET', '/api/admin/roster')).body;
+    assert.equal(after.wards.find((w) => w.number === 1).mandal_adhyaksh.id, ma2.id);
+    assert.equal(after.mandal_adhyaksh_list.find((m) => m.id === ma.id).ward_count, 1); // ward2 only
+    assert.equal(after.mandal_adhyaksh_list.find((m) => m.id === ma2.id).ward_count, 1);
+
+    // admin_id: null clears the assignment
+    const cleared = await assign(mayor, ctx.ward2, null);
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.body.mandal_adhyaksh, null);
+    assert.equal((await mayor('GET', '/api/admin/roster')).body.wards.find((w) => w.number === 2).mandal_adhyaksh, null);
+  });
+
+  test('roster: rejects an unknown constituency, an invalid/inactive Mandal Adhyaksh, and duplicate corporators', async () => {
+    const mayor = await asAdmin();
+    const ma = await createMandal(mayor);
+
+    assert.equal((await assign(mayor, 999999, ma.id)).status, 404);
+    assert.equal((await assign(mayor, ctx.ward1, 999999)).status, 400);
+    await mayor('PUT', `/api/admin/roster/mandal-adhyaksh/${ma.id}/deactivate`);
+    const viaInactive = await assign(mayor, ctx.ward1, ma.id);
+    assert.equal(viaInactive.status, 400);
+    assert.ok(viaInactive.body.error.fields.admin_id);
+
+    // ward1 already has an active corporator
+    const dup = await mayor('POST', '/api/admin/roster/corporators', { json: { ward_id: ctx.ward1, name: 'New Corp', username: 'newcorp' } });
+    assert.equal(dup.status, 400);
+    assert.ok(dup.body.error.fields.ward_id);
+    // ward3 has none - creating one works, with the default placeholder password
+    const created = await mayor('POST', '/api/admin/roster/corporators', { json: { ward_id: ctx.ward3, name: 'Corp Three', username: 'corp3' } });
+    assert.equal(created.status, 201);
+    const login = await client()('POST', '/api/auth/login', { json: { username: 'corp3', password: 'corporator123' } });
+    assert.equal(login.status, 200);
+    assert.equal(login.body.auth.user.ward.number, 3);
+
+    // deactivating it frees the constituency up for a replacement
+    await mayor('PUT', `/api/admin/roster/corporators/${created.body.corporator.id}/deactivate`);
+    const replacement = await mayor('POST', '/api/admin/roster/corporators', { json: { ward_id: ctx.ward3, name: 'Corp Three B', username: 'corp3b' } });
+    assert.equal(replacement.status, 201);
+  });
+
+  test('roster: usernames must be unique across corporators and admins, whichever role is being created', async () => {
+    const mayor = await asAdmin();
+    // 'corp1' already exists as a corporator
+    const clashCorp = await mayor('POST', '/api/admin/roster/mandal-adhyaksh', { json: { name: 'Some Name', username: 'corp1' } });
+    assert.equal(clashCorp.status, 400);
+    assert.ok(clashCorp.body.error.fields.username);
+    // 'admin' already exists as an admin
+    const clashAdmin = await mayor('POST', '/api/admin/roster/corporators', { json: { ward_id: ctx.ward3, name: 'Some Name', username: 'admin' } });
+    assert.equal(clashAdmin.status, 400);
+    assert.ok(clashAdmin.body.error.fields.username);
+  });
+
+  test('roster endpoints are mayor/admin-only: a Mandal Adhyaksh (and a corporator) get 403', async () => {
+    const mayor = await asAdmin();
+    const ma = await createMandal(mayor);
+    await assign(mayor, ctx.ward1, ma.id);
+    const asMandal = await client()('POST', '/api/auth/login', { json: { username: 'mandal1', password: 'mandal12345' } });
+    assert.equal(asMandal.status, 200);
+    assert.equal(asMandal.body.auth.user.role, 'mandal_adhyaksh');
+    const mandalApi = client();
+    await mandalApi('POST', '/api/auth/login', { json: { username: 'mandal1', password: 'mandal12345' } });
+
+    for (const [method, url, opts] of [
+      ['GET', '/api/admin/roster', {}],
+      ['POST', '/api/admin/roster/corporators', { json: { ward_id: ctx.ward3, name: 'X', username: 'x' } }],
+      ['POST', '/api/admin/roster/mandal-adhyaksh', { json: { name: 'X', username: 'x2' } }],
+      ['PUT', `/api/admin/roster/wards/${ctx.ward2}/mandal-adhyaksh`, { json: { admin_id: null } }],
+    ]) {
+      assert.equal((await mandalApi(method, url, opts)).status, 403, `${method} ${url}`);
+    }
+    const corpApi = client();
+    await corpApi('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } });
+    assert.equal((await corpApi('GET', '/api/admin/roster')).status, 403);
+  });
+
+  test('dashboard, issue list and issue detail are scoped to only the Mandal Adhyaksh\'s assigned constituencies', async () => {
+    const mayor = await asAdmin();
+    const ma = await createMandal(mayor);
+    await assign(mayor, ctx.ward1, ma.id);
+    await assign(mayor, ctx.ward2, ma.id);
+    // ward3 deliberately left unassigned to this Mandal Adhyaksh
+
+    const inWard1 = await fileIssue(ctx.ward1, { category: 'roads' });
+    const inWard2 = await fileIssue(ctx.ward2, { category: 'water' });
+    const inWard3 = await fileIssue(ctx.ward3, { category: 'roads' }); // out of scope
+    await resolve(inWard1);
+
+    const mandal = client();
+    await mandal('POST', '/api/auth/login', { json: { username: 'mandal1', password: 'mandal12345' } });
+
+    const dash = (await mandal('GET', '/api/admin/dashboard')).body;
+    assert.equal(dash.totals.total, 2); // not 3 - ward3's issue is excluded
+    assert.equal(dash.totals.resolved, 1);
+    assert.equal(dash.wards.length, 2);
+    assert.deepEqual(dash.wards.map((w) => w.ward_number).sort(), [1, 2]);
+    assert.equal(dash.by_category.reduce((n, c) => n + c.total, 0), 2);
+
+    const list = (await mandal('GET', '/api/admin/issues?status=all')).body;
+    assert.deepEqual(list.issues.map((i) => i.public_id).sort(), [inWard1, inWard2].sort());
+    assert.equal(list.total, 2);
+
+    assert.equal((await mandal('GET', `/api/admin/issues/${inWard1}`)).status, 200);
+    assert.equal((await mandal('GET', `/api/admin/issues/${inWard2}`)).status, 200);
+    // out-of-scope issue: 404, not leaked, even fetched directly by ID
+    assert.equal((await mandal('GET', `/api/admin/issues/${inWard3}`)).status, 404);
+    assert.equal((await mandal('GET', `/api/admin/issues?ward=3&status=all`)).body.issues.length, 0);
+
+    // the mayor's own view is unaffected - still sees everything
+    assert.equal((await mayor('GET', '/api/admin/dashboard')).body.totals.total, 3);
+    assert.equal((await mayor('GET', '/api/admin/issues?status=all')).body.issues.length, 3);
+  });
+
+  test('a Mandal Adhyaksh with no assigned constituencies sees an empty scoped dashboard, never the whole city', async () => {
+    const mayor = await asAdmin();
+    await createMandal(mayor, 'Unassigned Mandal', 'mandal0');
+    await fileIssue(ctx.ward1);
+    await fileIssue(ctx.ward2);
+
+    const mandal = client();
+    const login = await mandal('POST', '/api/auth/login', { json: { username: 'mandal0', password: 'mandal12345' } });
+    assert.deepEqual(login.body.auth.user.wards, []);
+    const dash = (await mandal('GET', '/api/admin/dashboard')).body;
+    assert.equal(dash.totals.total, 0);
+    assert.equal(dash.wards.length, 0);
+    assert.deepEqual((await mandal('GET', '/api/admin/issues?status=all')).body.issues, []);
+  });
+
+  test('a deactivated Mandal Adhyaksh cannot sign in; private notes stay their own, same as any admin', async () => {
+    const mayor = await asAdmin();
+    const ma = await createMandal(mayor);
+    await assign(mayor, ctx.ward1, ma.id);
+    const mandal = client();
+    await mandal('POST', '/api/auth/login', { json: { username: 'mandal1', password: 'mandal12345' } });
+    const note = await mandal('POST', '/api/admin/notes', { json: { body: 'Mandal-only note' } });
+    assert.equal(note.status, 201);
+    assert.deepEqual((await mayor('GET', '/api/admin/notes')).body.notes, []); // mayor doesn't see the Mandal Adhyaksh's notes
+    assert.equal((await mandal('GET', '/api/admin/notes')).body.notes.length, 1);
+
+    await mayor('PUT', `/api/admin/roster/mandal-adhyaksh/${ma.id}/deactivate`);
+    assert.equal((await client()('POST', '/api/auth/login', { json: { username: 'mandal1', password: 'mandal12345' } })).status, 401);
   });
 });
 

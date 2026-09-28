@@ -12,7 +12,8 @@ photos. The mayor / admin gets a city-wide dashboard.
 | **Citizen** (no login) | Report an issue with photos, a pin on the map (GPS or tap), constituency, name and phone → receive an Issue ID → look it up later and see the full update history |
 | **Citizen portal** (phone + OTP) | Sign in with just a mobile number to see every issue reported with that number, with basic status/timeline detail - no password, no separate signup (see [Citizen portal](#citizen-portal)) |
 | **Corporator** (username + password) | Own dashboard with drill-down, see their constituency's issues, change status with one-tap buttons, reject with a mandatory reason (+ optional proof photos), add optional remarks and photos, transfer an issue to another constituency |
-| **Mayor / Admin** (username + password) | Constituency-wise issue counts, resolution statistics, corporator performance summary, a category pie chart that drills down to the exact record, and private budget notes |
+| **Mayor / Admin** (username + password) | Constituency-wise issue counts, resolution statistics, corporator performance summary, a category pie chart that drills down to the exact record, private budget notes, and **Manage roles** - define which corporator and which Mandal Adhyaksh covers each constituency |
+| **Mandal Adhyaksh** (username + password) | The same dashboard as the Mayor/Admin, but scoped to only the constituencies assigned to them in Manage roles - see [Mandal Adhyaksh portal](#mandal-adhyaksh-portal) |
 
 Deliberately **not** in V1: JWT, real SMS delivery (the citizen OTP is a fixed placeholder for now - see
 [Citizen portal](#citizen-portal)), GIS analysis. The one external service is the free OpenStreetMap tile
@@ -117,6 +118,30 @@ per message.
 - The pie chart uses one fixed colour per category from a colour-blind-checked palette, with a legend table showing
   every count and share (so nothing depends on colour or hover alone); with 7 categories it is at the upper limit of
   what a pie communicates well, which is why the table is always shown next to it.
+- **Manage roles** (`/admin/roles`, Mayor/Admin only) - constituency-first: pick a constituency and its current
+  corporator and Mandal Adhyaksh are shown, prepopulated. Create a corporator when a constituency has none
+  (deactivate the current one first to replace them); create a Mandal Adhyaksh and assign them to one or more
+  constituencies from a dropdown of existing Mandal Adhyaksh accounts. A table of every constituency's current
+  assignments sits below for an at-a-glance view. New accounts get a placeholder password (`corporator123` /
+  `mandal12345`, same spirit as `npm run seed`'s demo accounts) - there is no forced reset yet, see
+  [Known limitations](#known-limitations).
+
+## Mandal Adhyaksh portal
+
+A **Mandal Adhyaksh** ("Mandal President", a party-organisation role distinct from an elected corporator) sees
+the same dashboard, issue list and record detail as the Mayor/Admin - at `/mandal` instead of `/admin` - but
+scoped to only the constituencies the Mayor/Admin assigned them in [Manage roles](#mayor--admin-portal). One
+Mandal Adhyaksh can cover multiple constituencies; one constituency has at most one Mandal Adhyaksh at a time.
+
+- The scoping is enforced **server-side** (`wardIds` in `services/stats.js` / `services/issues.js`, from
+  `admin_wards` - see `docs/ARCHITECTURE.md`), so it applies even to an issue opened directly by ID: an issue
+  outside their assigned constituencies 404s, exactly like an issue outside a corporator's own constituency.
+  A Mandal Adhyaksh assigned to none currently sees an empty dashboard, never the whole city.
+- Session-wise a Mandal Adhyaksh is still an "admin" role account (same login, same private notes, same
+  session/auth code as the Mayor) - only `admins.role` and the route-local `requireMayor` check distinguish
+  them, so **Manage roles** itself, and only that, is Mayor/Admin-only (403 for a Mandal Adhyaksh).
+- "Mandal Adhyaksh" is kept as-is in the English UI (there is no simpler distinct English gloss for this
+  specific title) and shown as "मंडल अध्यक्ष" (native Devanagari) in Marathi.
 
 ## Languages (English / मराठी)
 
@@ -222,7 +247,7 @@ wardwatch/
 │       ├── pages/                route-level screens (citizen/, corporator/, admin/)
 │       └── lib/                  constants (statuses, categories), formatters
 ├── server/                     Express API
-│   ├── db/migrations/          ordered .sql files (001_init ... 009_citizen_login)
+│   ├── db/migrations/          ordered .sql files (001_init ... 011_corporator_ward_unique_active)
 │   ├── scripts/                seed.js, create-user.js
 │   ├── src/
 │   │   ├── app.js                middleware + route wiring (createApp for tests)
@@ -245,7 +270,9 @@ Full details - database schema, every API route, pages and the component tree - 
 
 ## Managing accounts and constituencies
 
-V1 has no admin UI for user management; use SQL and the CLI.
+Corporators and Mandal Adhyaksh accounts are managed day-to-day from **Manage roles** (`/admin/roles`, see
+[Mayor / Admin portal](#mayor--admin-portal)) - no SQL needed for those. The Mayor/Admin account itself (there
+is no UI to create the first one, or a second admin) still goes through the CLI:
 
 ```bash
 # Corporator (one per constituency) and admin. Password comes from $WW_PASSWORD or a hidden prompt.
@@ -399,7 +426,10 @@ These are conscious V1 trade-offs, roughly in the order I'd tackle them:
 1. **No notifications.** Citizens must keep their Issue ID (or sign in to `/my` by phone number);
    corporators must check their inbox. (Email/SMS was excluded from V1, and the citizen portal's OTP does
    not send an SMS either - see [Citizen portal](#citizen-portal).)
-2. **No account-management UI**, password reset or password change - use `user:create` / SQL.
+2. **No password reset or password change**, and no UI for the Mayor/Admin account itself - use `user:create` /
+   SQL. (Corporators and Mandal Adhyaksh accounts *can* now be created from **Manage roles** - see
+   [Managing accounts](#managing-accounts-and-constituencies) - but they get a fixed placeholder password with
+   no forced reset.)
 3. **No reassignment.** Issues go to the constituency's corporator at submission; if a constituency has none the issue
    is stored unassigned (visible in the admin totals) and no one can act on it until an admin
    assigns it in SQL.

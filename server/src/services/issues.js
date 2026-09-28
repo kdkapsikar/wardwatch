@@ -59,11 +59,12 @@ export async function createIssue({
  *  - public view (default): no citizen contact details.
  *  - `corporatorId`: restricts to that corporator's issues and includes contact details + coordinates.
  *  - `staff: true` (mayor/admin): any issue, with the same private fields plus the assigned corporator.
+ *    `staffWardIds` further restricts this to a Mandal Adhyaksh's assigned constituencies.
  *  - `citizenPhone`: restricts to issues filed with that phone number; adds who it is assigned to
  *    (but not the contact/location fields, which would just echo back what the citizen already knows).
- * Returns null if not found (or not visible to that corporator / phone number).
+ * Returns null if not found (or not visible to that corporator / phone number / Mandal Adhyaksh).
  */
-export async function getIssue(publicId, { corporatorId, staff = false, citizenPhone } = {}) {
+export async function getIssue(publicId, { corporatorId, staff = false, citizenPhone, staffWardIds } = {}) {
   const params = [publicId];
   let scope = '';
   if (corporatorId !== undefined) {
@@ -72,6 +73,9 @@ export async function getIssue(publicId, { corporatorId, staff = false, citizenP
   } else if (citizenPhone !== undefined) {
     params.push(citizenPhone);
     scope = 'AND i.citizen_phone = $2';
+  } else if (staff && staffWardIds) {
+    params.push(staffWardIds);
+    scope = 'AND i.ward_id = ANY($2)';
   }
   const { rows } = await query(
     `SELECT i.id, i.public_id, i.category, i.title, i.description, i.address, i.status, i.photos,
@@ -142,10 +146,13 @@ export async function getIssue(publicId, { corporatorId, staff = false, citizenP
 /**
  * Paged issue list with per-status counts for filter chips. Used by the corporator inbox
  * (scope.corporatorId) and by the mayor/admin issue list (no scope; optional scope.wardNumber).
+ * `wardIds` is a hard access-control scope (a Mandal Adhyaksh's assigned constituencies, by id) -
+ * unlike `wardNumber`, which is the user's own chosen filter chip (by displayed number), `wardIds`
+ * always applies regardless of what the caller asked for.
  * Filters: status ('open' = submitted/acknowledged/in_progress), category, overdue (open + older than
  * OVERDUE_DAYS). The counts honour every filter except status, so chips always add up to the list.
  */
-export async function listIssues({ corporatorId, wardNumber } = {}, { status, page, category, overdue }) {
+export async function listIssues({ corporatorId, wardNumber, wardIds } = {}, { status, page, category, overdue }) {
   const params = [];
   const bind = (value) => {
     params.push(value);
@@ -153,6 +160,7 @@ export async function listIssues({ corporatorId, wardNumber } = {}, { status, pa
   };
   const base = [];
   if (corporatorId !== undefined) base.push(`i.corporator_id = ${bind(corporatorId)}`);
+  if (wardIds) base.push(`w.id = ANY(${bind(wardIds)})`);
   if (wardNumber !== undefined) base.push(`w.number = ${bind(wardNumber)}`);
   if (category) base.push(`i.category = ${bind(category)}`);
   if (overdue) {

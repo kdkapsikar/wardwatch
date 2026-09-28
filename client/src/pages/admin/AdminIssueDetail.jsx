@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client.js';
+import { usePortal } from '../../context/PortalContext.jsx';
 import { useT } from '../../i18n/LanguageContext.jsx';
 import Alert from '../../components/ui/Alert.jsx';
 import CitizenContact from '../../components/CitizenContact.jsx';
@@ -12,6 +13,7 @@ import Spinner from '../../components/ui/Spinner.jsx';
 /** The exact record, read-only, for the mayor's office: full detail + history + private notes on this issue. */
 export default function AdminIssueDetail() {
   const { id } = useParams();
+  const { basePath } = usePortal();
   const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,7 +38,7 @@ export default function AdminIssueDetail() {
       {cameFromApp ? (
         <button type="button" onClick={() => navigate(-1)} className="text-sm text-brand-700 hover:underline">{t('admin.detail.back')}</button>
       ) : (
-        <Link to="/admin/issues" className="text-sm text-brand-700 hover:underline">{t('admin.detail.allIssues')}</Link>
+        <Link to={`${basePath}/issues`} className="text-sm text-brand-700 hover:underline">{t('admin.detail.allIssues')}</Link>
       )}
       <Alert>{error}</Alert>
       {!issue && !error && <Spinner />}
