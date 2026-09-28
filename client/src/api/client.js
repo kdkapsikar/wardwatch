@@ -113,8 +113,10 @@ export const api = {
   // roster: who covers which constituency (mayor/admin only)
   getRoster: () => request('/admin/roster'),
   createCorporator: (body) => request('/admin/roster/corporators', { method: 'POST', json: body }),
+  updateCorporator: (id, body) => request(`/admin/roster/corporators/${id}`, { method: 'PUT', json: body }),
   deactivateCorporator: (id) => request(`/admin/roster/corporators/${id}/deactivate`, { method: 'PUT' }),
   createMandalAdhyaksh: (body) => request('/admin/roster/mandal-adhyaksh', { method: 'POST', json: body }),
+  updateMandalAdhyaksh: (id, body) => request(`/admin/roster/mandal-adhyaksh/${id}`, { method: 'PUT', json: body }),
   deactivateMandalAdhyaksh: (id) => request(`/admin/roster/mandal-adhyaksh/${id}/deactivate`, { method: 'PUT' }),
   assignMandalAdhyaksh: (wardId, adminId) => request(`/admin/roster/wards/${wardId}/mandal-adhyaksh`, { method: 'PUT', json: { admin_id: adminId } }),
 };

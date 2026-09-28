@@ -118,13 +118,20 @@ per message.
 - The pie chart uses one fixed colour per category from a colour-blind-checked palette, with a legend table showing
   every count and share (so nothing depends on colour or hover alone); with 7 categories it is at the upper limit of
   what a pie communicates well, which is why the table is always shown next to it.
-- **Manage roles** (`/admin/roles`, Mayor/Admin only) - constituency-first: pick a constituency and its current
-  corporator and Mandal Adhyaksh are shown, prepopulated. Create a corporator when a constituency has none
-  (deactivate the current one first to replace them); create a Mandal Adhyaksh and assign them to one or more
-  constituencies from a dropdown of existing Mandal Adhyaksh accounts. A table of every constituency's current
-  assignments sits below for an at-a-glance view. New accounts get a placeholder password (`corporator123` /
-  `mandal12345`, same spirit as `npm run seed`'s demo accounts) - there is no forced reset yet, see
-  [Known limitations](#known-limitations).
+- **Manage roles** (`/admin/roles`, Mayor/Admin only) - a **grid**, one row per constituency:
+  - **Corporator** - always-editable Name/Username fields right in the row. Fill them in to create one where
+    there is none; edit them and a **Save** link appears to update the same account in place (fixes their
+    details without disturbing their login or issue history) - a separate **Deactivate** (2-step confirm)
+    frees the constituency for a different person entirely.
+  - **Mandal Adhyaksh** - tick the checkbox on as many constituency rows as you like, pick a Mandal Adhyaksh
+    (or "— Unassign —") from the toolbar above the grid, and **Apply to N constituencies** assigns all of
+    them at once - the fast way to hand, say, 3 constituencies each to 10 people. A small "Create a Mandal
+    Adhyaksh" form above the grid adds a new account (unassigned) that then shows up in that dropdown; a
+    "Mandal Adhyaksh accounts" list below the grid can rename (same in-place edit as a corporator) or fully
+    deactivate one (ending every constituency they cover, not just one).
+  - A search box filters the grid's rows by constituency number or name.
+  - New accounts get a placeholder password (`corporator123` / `mandal12345`, same spirit as `npm run
+    seed`'s demo accounts) - there is no forced reset yet, see [Known limitations](#known-limitations).
 
 ## Mandal Adhyaksh portal
 

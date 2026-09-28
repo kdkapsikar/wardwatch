@@ -3,14 +3,14 @@ import { HttpError } from '../lib/httpError.js';
 import { normalizePublicId } from '../lib/ids.js';
 import {
   adminListQuerySchema, noteSchema, parse,
-  rosterAssignSchema, rosterCorporatorSchema, rosterMandalAdhyakshSchema,
+  rosterAssignSchema, rosterCorporatorSchema, rosterEditPersonSchema, rosterMandalAdhyakshSchema,
 } from '../lib/validation.js';
 import { requireRole } from '../middleware/auth.js';
 import { getIssue, listIssues } from '../services/issues.js';
 import { createNote, deleteNote, listNotes, updateNote } from '../services/notes.js';
 import {
   assignMandalAdhyaksh, createCorporator, createMandalAdhyaksh,
-  deactivateCorporator, deactivateMandalAdhyaksh, getRoster,
+  deactivateCorporator, deactivateMandalAdhyaksh, getRoster, updateCorporator, updateMandalAdhyaksh,
 } from '../services/roster.js';
 import { getDashboard } from '../services/stats.js';
 
@@ -99,6 +99,12 @@ router.post('/roster/corporators', requireMayor, async (req, res) => {
   res.status(201).json({ corporator: await createCorporator(data) });
 });
 
+// PUT /api/admin/roster/corporators/:id  { name, username } - edits the same account in place
+router.put('/roster/corporators/:id', requireMayor, async (req, res) => {
+  const data = parse(rosterEditPersonSchema, req.body ?? {});
+  res.json({ corporator: await updateCorporator(req.params.id, data) });
+});
+
 // PUT /api/admin/roster/corporators/:id/deactivate
 router.put('/roster/corporators/:id/deactivate', requireMayor, async (req, res) => {
   res.json({ corporator: await deactivateCorporator(req.params.id) });
@@ -108,6 +114,12 @@ router.put('/roster/corporators/:id/deactivate', requireMayor, async (req, res) 
 router.post('/roster/mandal-adhyaksh', requireMayor, async (req, res) => {
   const data = parse(rosterMandalAdhyakshSchema, req.body ?? {});
   res.status(201).json({ mandal_adhyaksh: await createMandalAdhyaksh(data) });
+});
+
+// PUT /api/admin/roster/mandal-adhyaksh/:id  { name, username } - edits the same account in place
+router.put('/roster/mandal-adhyaksh/:id', requireMayor, async (req, res) => {
+  const data = parse(rosterEditPersonSchema, req.body ?? {});
+  res.json({ mandal_adhyaksh: await updateMandalAdhyaksh(req.params.id, data) });
 });
 
 // PUT /api/admin/roster/mandal-adhyaksh/:id/deactivate

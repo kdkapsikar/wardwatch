@@ -89,6 +89,20 @@ export async function createCorporator({ ward_id: wardId, name, username }) {
   return rows[0];
 }
 
+/** Edits an existing corporator's own name/username - the same account and history, not a replacement. */
+export async function updateCorporator(id, { name, username }) {
+  const existing = await query('SELECT id, username FROM corporators WHERE id = $1', [id]);
+  if (!existing.rowCount) throw new HttpError(404, 'not_found', 'Corporator not found');
+  if (existing.rows[0].username.toLowerCase() !== username.toLowerCase() && (await usernameTaken(username))) {
+    throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', { username: 'That username is already taken' });
+  }
+  const { rows } = await query(
+    'UPDATE corporators SET name = $2, username = $3 WHERE id = $1 RETURNING id, name, username, is_active',
+    [id, name, username],
+  );
+  return rows[0];
+}
+
 export async function deactivateCorporator(id) {
   const { rows } = await query(
     'UPDATE corporators SET is_active = false WHERE id = $1 RETURNING id, name, username, is_active',
@@ -110,6 +124,20 @@ export async function createMandalAdhyaksh({ name, username }) {
     [name, username, hash],
   );
   return { ...rows[0], ward_count: 0 };
+}
+
+/** Edits an existing Mandal Adhyaksh's own name/username - their constituency assignments are untouched. */
+export async function updateMandalAdhyaksh(id, { name, username }) {
+  const existing = await query(`SELECT id, username FROM admins WHERE id = $1 AND role = 'mandal_adhyaksh'`, [id]);
+  if (!existing.rowCount) throw new HttpError(404, 'not_found', 'Mandal Adhyaksh not found');
+  if (existing.rows[0].username.toLowerCase() !== username.toLowerCase() && (await usernameTaken(username))) {
+    throw new HttpError(400, 'validation_error', 'Please fix the highlighted fields', { username: 'That username is already taken' });
+  }
+  const { rows } = await query(
+    'UPDATE admins SET name = $2, username = $3 WHERE id = $1 RETURNING id, name, username, is_active',
+    [id, name, username],
+  );
+  return rows[0];
 }
 
 export async function deactivateMandalAdhyaksh(id) {

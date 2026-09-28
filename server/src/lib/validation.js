@@ -166,6 +166,13 @@ export const rosterMandalAdhyakshSchema = z.object({
   username: rosterUsername,
 });
 
+// Editing an existing corporator/Mandal Adhyaksh's own details (name/username) - same account, no
+// ward_id (that constituency link is changed separately, via rosterAssignSchema below).
+export const rosterEditPersonSchema = z.object({
+  name: text('Full name', { min: 2, max: 100 }),
+  username: rosterUsername,
+});
+
 // { admin_id: null } clears a constituency's Mandal Adhyaksh.
 export const rosterAssignSchema = z.object({
   admin_id: z.preprocess(

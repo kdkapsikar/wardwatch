@@ -1026,6 +1026,37 @@ describe('mandal adhyaksh: scoped dashboards/issues, and roster management', () 
     assert.ok(clashAdmin.body.error.fields.username);
   });
 
+  test('roster: editing an existing corporator/Mandal Adhyaksh updates the same account in place', async () => {
+    const mayor = await asAdmin();
+    const ma = await createMandal(mayor, 'Original Name', 'original1');
+
+    // corporator: rename and re-username, keep the same id (and login stops working under the old name)
+    const corpId = (await mayor('GET', '/api/admin/roster')).body.wards.find((w) => w.number === 1).corporator.id;
+    const renamed = await mayor('PUT', `/api/admin/roster/corporators/${corpId}`, { json: { name: 'Asha P. Patil', username: 'ashapatil' } });
+    assert.equal(renamed.status, 200);
+    assert.deepEqual([renamed.body.corporator.id, renamed.body.corporator.name, renamed.body.corporator.username], [corpId, 'Asha P. Patil', 'ashapatil']);
+    assert.equal((await client()('POST', '/api/auth/login', { json: { username: 'corp1', password: 'correct-horse-1' } })).status, 401);
+    assert.equal((await client()('POST', '/api/auth/login', { json: { username: 'ashapatil', password: 'correct-horse-1' } })).status, 200);
+
+    // renaming to its own current username is a no-op, not a false "username taken"
+    const same = await mayor('PUT', `/api/admin/roster/corporators/${corpId}`, { json: { name: 'Asha P. Patil', username: 'AshaPatil' } });
+    assert.equal(same.status, 200);
+    // renaming to someone else's username is rejected
+    const clash = await mayor('PUT', `/api/admin/roster/corporators/${corpId}`, { json: { name: 'Some Name', username: 'corp2' } });
+    assert.equal(clash.status, 400);
+    assert.ok(clash.body.error.fields.username);
+    assert.equal((await mayor('PUT', '/api/admin/roster/corporators/999999', { json: { name: 'Some Name', username: 'nobody' } })).status, 404);
+
+    // Mandal Adhyaksh: same in-place rename; their ward assignments are untouched
+    await assign(mayor, ctx.ward1, ma.id);
+    const renamedMa = await mayor('PUT', `/api/admin/roster/mandal-adhyaksh/${ma.id}`, { json: { name: 'Real Name', username: 'realname1' } });
+    assert.equal(renamedMa.status, 200);
+    assert.equal(renamedMa.body.mandal_adhyaksh.name, 'Real Name');
+    assert.equal((await mayor('GET', '/api/admin/roster')).body.wards.find((w) => w.number === 1).mandal_adhyaksh.name, 'Real Name');
+    assert.equal((await client()('POST', '/api/auth/login', { json: { username: 'realname1', password: 'mandal12345' } })).status, 200);
+    assert.equal((await mayor('PUT', '/api/admin/roster/mandal-adhyaksh/999999', { json: { name: 'Some Name', username: 'nobody2' } })).status, 404);
+  });
+
   test('roster endpoints are mayor/admin-only: a Mandal Adhyaksh (and a corporator) get 403', async () => {
     const mayor = await asAdmin();
     const ma = await createMandal(mayor);
@@ -1036,10 +1067,13 @@ describe('mandal adhyaksh: scoped dashboards/issues, and roster management', () 
     const mandalApi = client();
     await mandalApi('POST', '/api/auth/login', { json: { username: 'mandal1', password: 'mandal12345' } });
 
+    const corpId = (await mayor('GET', '/api/admin/roster')).body.wards.find((w) => w.number === 1).corporator.id;
     for (const [method, url, opts] of [
       ['GET', '/api/admin/roster', {}],
       ['POST', '/api/admin/roster/corporators', { json: { ward_id: ctx.ward3, name: 'X', username: 'x' } }],
+      ['PUT', `/api/admin/roster/corporators/${corpId}`, { json: { name: 'X', username: 'x3' } }],
       ['POST', '/api/admin/roster/mandal-adhyaksh', { json: { name: 'X', username: 'x2' } }],
+      ['PUT', `/api/admin/roster/mandal-adhyaksh/${ma.id}`, { json: { name: 'X', username: 'x4' } }],
       ['PUT', `/api/admin/roster/wards/${ctx.ward2}/mandal-adhyaksh`, { json: { admin_id: null } }],
     ]) {
       assert.equal((await mandalApi(method, url, opts)).status, 403, `${method} ${url}`);

@@ -114,10 +114,12 @@ Backs the **Manage roles** screen (`services/roster.js`). Usernames are checked 
 | --- | --- | --- |
 | `GET /api/admin/roster` | - | `{ wards: [{ id, number, name, name_mr, corporator, mandal_adhyaksh }], mandal_adhyaksh_list: [{ id, name, username, is_active, ward_count }] }` - `corporator`/`mandal_adhyaksh` are `null` when unassigned |
 | `POST /api/admin/roster/corporators` | `{ ward_id, name, username }` | `201 { corporator }`, password `corporator123`; `400` if the constituency already has an active corporator or the username is taken |
+| `PUT /api/admin/roster/corporators/:id` | `{ name, username }` | `200 { corporator }` - edits the **same account in place** (no password change, sessions untouched); `400` if the new username is taken by someone else, `404` if the id doesn't exist |
 | `PUT /api/admin/roster/corporators/:id/deactivate` | - | `{ corporator }`; frees the constituency for a replacement |
 | `POST /api/admin/roster/mandal-adhyaksh` | `{ name, username }` | `201 { mandal_adhyaksh }`, created unassigned, password `mandal12345` |
+| `PUT /api/admin/roster/mandal-adhyaksh/:id` | `{ name, username }` | `200 { mandal_adhyaksh }` - edits the same account in place; their `admin_wards` rows are untouched |
 | `PUT /api/admin/roster/mandal-adhyaksh/:id/deactivate` | - | `{ mandal_adhyaksh }`; ends their sessions, but leaves any `admin_wards` rows (a constituency with an inactive Mandal Adhyaksh reads as still-assigned in the roster until reassigned) |
-| `PUT /api/admin/roster/wards/:wardId/mandal-adhyaksh` | `{ admin_id: number \| null }` | `200 { ward, mandal_adhyaksh }`; `null` clears the constituency's assignment. One `admin_id` can be assigned to many constituencies by calling this once per constituency |
+| `PUT /api/admin/roster/wards/:wardId/mandal-adhyaksh` | `{ admin_id: number \| null }` | `200 { ward, mandal_adhyaksh }`; `null` clears the constituency's assignment. One `admin_id` can be assigned to many constituencies by calling this once per constituency - the client's bulk-assign toolbar in `AdminRoles.jsx` calls this once per **selected** constituency (`Promise.allSettled`), which is what "select several rows, apply one Mandal Adhyaksh, save" resolves to on the wire |
 
 ### Citizen (`Authorization: Bearer <token>`, `role: "citizen"`)
 
@@ -150,7 +152,7 @@ falls back to the React app's `index.html`.
 | `/admin/issues` | `AdminIssues` (city-wide list; status/category/constituency/overdue filters from URL params) | admin, `adminRole="admin"` |
 | `/admin/issues/:id` | `AdminIssueDetail` (the exact record, read-only, with private notes on it) | admin, `adminRole="admin"` |
 | `/admin/notes` | `AdminNotes` (all my private notes, general or per issue) | admin, `adminRole="admin"` |
-| `/admin/roles` | `AdminRoles` (Manage roles: pick a constituency, see/edit its corporator and Mandal Adhyaksh, prepopulated; full roster table) | admin, `adminRole="admin"` |
+| `/admin/roles` | `AdminRoles` (Manage roles: a grid, one row per constituency - corporator name/username editable in place, checkbox rows + a toolbar to bulk-assign a Mandal Adhyaksh to several constituencies at once) | admin, `adminRole="admin"` |
 | `/mandal`, `/mandal/issues`, `/mandal/issues/:id`, `/mandal/notes` | the **same** `AdminDashboard` / `AdminIssues` / `AdminIssueDetail` / `AdminNotes` components as `/admin/*`, mounted under a `PortalProvider` that points their internal links at `/mandal` instead - see [Component hierarchy](#component-hierarchy) | admin, `adminRole="mandal_adhyaksh"` |
 | `*` | `NotFound` | - |
 
@@ -206,7 +208,7 @@ main.jsx
             │   │   ├─ AdminIssues       (IssueListView scope="admin")
             │   │   ├─ AdminIssueDetail  (IssueDetails, CitizenContact, NotesPanel, IssueTimeline)
             │   │   ├─ AdminNotes        (NotesPanel)
-            │   │   └─ AdminRoles        (constituency picker, CorporatorPanel, MandalPanel, RosterTable)
+            │   │   └─ AdminRoles        (grid: CorporatorCell per row, checkbox + bulk-assign toolbar, MandalAccountRow list)
             │   ├─ ProtectedRoute role="admin" adminRole="mandal_adhyaksh"
             │   │   └─ PortalProvider basePath="/mandal"   (context: usePortal() - see below)
             │   │       ├─ AdminDashboard    (same component; scope banner lists the caller's constituencies)
